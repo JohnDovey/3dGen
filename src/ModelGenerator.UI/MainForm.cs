@@ -219,13 +219,24 @@ public class MainForm : Form
 
         try
         {
-            var (baseMesh, textMeshes) = _orchestrator.GenerateModelParts(model);
+            var (floor, border, textMeshes, svgMeshes) = _orchestrator.GenerateModelParts(model);
+
+            // TEMPORARY interim wiring: floor+border merged into one "base" mesh and SVG meshes
+            // not yet rendered/exported separately — HelixViewportHost.ShowModel's signature and
+            // this whole block get redesigned in Phase 3 (per-item colors, SVG rendering/drag).
+            var baseMesh = new CoreMesh();
+            baseMesh.Append(floor);
+            baseMesh.Append(border);
 
             var merged = new CoreMesh();
             merged.Append(baseMesh);
             foreach (var textMesh in textMeshes)
             {
                 merged.Append(textMesh.Mesh);
+            }
+            foreach (var svgMesh in svgMeshes)
+            {
+                merged.Append(svgMesh.Mesh);
             }
             _currentMesh = merged;
 

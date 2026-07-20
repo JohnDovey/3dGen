@@ -20,6 +20,7 @@ static class Program
         var orchestrator = new ModelOrchestrator(
             new ShapeGenerator(),
             new TextMeshConverter(),
+            new SvgMeshConverter(),
             new TextPositioner(),
             new MeshComposer());
 
