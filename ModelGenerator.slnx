@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ModelGenerator.Core/ModelGenerator.Core.csproj" />
+    <Project Path="src/ModelGenerator.Data/ModelGenerator.Data.csproj" />
+    <Project Path="src/ModelGenerator.UI/ModelGenerator.UI.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ModelGenerator.Tests/ModelGenerator.Tests.csproj" />
+  </Folder>
+</Solution>

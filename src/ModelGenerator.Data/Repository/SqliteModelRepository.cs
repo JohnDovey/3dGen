@@ -1,0 +1,236 @@
+using Microsoft.Data.Sqlite;
+using ModelGenerator.Core.Models;
+using ModelGenerator.Data.Database;
+
+namespace ModelGenerator.Data.Repository;
+
+public class SqliteModelRepository : IModelRepository
+{
+    private readonly ConnectionFactory _connectionFactory;
+
+    public SqliteModelRepository(ConnectionFactory connectionFactory)
+    {
+        _connectionFactory = connectionFactory;
+    }
+
+    public async Task<Model?> GetModelByIdAsync(int modelId)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT * FROM Models WHERE ModelId = @id;";
+        command.Parameters.AddWithValue("@id", modelId);
+
+        Model? model = null;
+        using (var reader = await command.ExecuteReaderAsync())
+        {
+            if (await reader.ReadAsync())
+            {
+                model = ReadModel(reader);
+            }
+        }
+
+        if (model is null)
+        {
+            return null;
+        }
+
+        model.TextLines = await LoadTextLinesAsync(connection, modelId);
+        return model;
+    }
+
+    public async Task<List<Model>> ListModelsAsync()
+    {
+        using var connection = _connectionFactory.CreateConnection();
+
+        var models = new List<Model>();
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT * FROM Models ORDER BY ModifiedDate DESC;";
+            using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                models.Add(ReadModel(reader));
+            }
+        }
+
+        foreach (var model in models)
+        {
+            model.TextLines = await LoadTextLinesAsync(connection, model.Id);
+        }
+
+        return models;
+    }
+
+    public async Task<int> SaveModelAsync(Model model)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var transaction = connection.BeginTransaction();
+
+        if (model.Id == 0)
+        {
+            using var insert = connection.CreateCommand();
+            insert.Transaction = transaction;
+            insert.CommandText = """
+                INSERT INTO Models (Name, ShapeType, ShapeSize, ShapeHeight, ShapeThickness, BorderThickness, BorderHeight, ModifiedDate)
+                VALUES (@name, @shapeType, @shapeSize, @shapeHeight, @shapeThickness, @borderThickness, @borderHeight, datetime('now'));
+                SELECT last_insert_rowid();
+                """;
+            AddModelParameters(insert, model);
+            model.Id = Convert.ToInt32((long)(await insert.ExecuteScalarAsync())!);
+        }
+        else
+        {
+            using var update = connection.CreateCommand();
+            update.Transaction = transaction;
+            update.CommandText = """
+                UPDATE Models SET
+                    Name = @name,
+                    ShapeType = @shapeType,
+                    ShapeSize = @shapeSize,
+                    ShapeHeight = @shapeHeight,
+                    ShapeThickness = @shapeThickness,
+                    BorderThickness = @borderThickness,
+                    BorderHeight = @borderHeight,
+                    ModifiedDate = datetime('now')
+                WHERE ModelId = @id;
+                """;
+            AddModelParameters(update, model);
+            update.Parameters.AddWithValue("@id", model.Id);
+            await update.ExecuteNonQueryAsync();
+
+            using var deleteTextLines = connection.CreateCommand();
+            deleteTextLines.Transaction = transaction;
+            deleteTextLines.CommandText = "DELETE FROM TextLines WHERE ModelId = @id;";
+            deleteTextLines.Parameters.AddWithValue("@id", model.Id);
+            await deleteTextLines.ExecuteNonQueryAsync();
+        }
+
+        foreach (var textLine in model.TextLines)
+        {
+            using var insertLine = connection.CreateCommand();
+            insertLine.Transaction = transaction;
+            insertLine.CommandText = """
+                INSERT INTO TextLines
+                    (ModelId, LineNumber, Content, FontName, FontSize, TextHeight, PositionMode, PositionX, PositionY, PositionZ, RotationZ)
+                VALUES
+                    (@modelId, @lineNumber, @content, @fontName, @fontSize, @textHeight, @positionMode, @positionX, @positionY, @positionZ, @rotationZ);
+                """;
+            insertLine.Parameters.AddWithValue("@modelId", model.Id);
+            insertLine.Parameters.AddWithValue("@lineNumber", textLine.LineNumber);
+            insertLine.Parameters.AddWithValue("@content", textLine.Content);
+            insertLine.Parameters.AddWithValue("@fontName", textLine.FontName);
+            insertLine.Parameters.AddWithValue("@fontSize", textLine.FontSize);
+            insertLine.Parameters.AddWithValue("@textHeight", textLine.TextHeight);
+            insertLine.Parameters.AddWithValue("@positionMode", (int)textLine.PositionMode);
+            insertLine.Parameters.AddWithValue("@positionX", textLine.PositionX);
+            insertLine.Parameters.AddWithValue("@positionY", textLine.PositionY);
+            insertLine.Parameters.AddWithValue("@positionZ", textLine.PositionZ);
+            insertLine.Parameters.AddWithValue("@rotationZ", textLine.RotationZ);
+            await insertLine.ExecuteNonQueryAsync();
+        }
+
+        transaction.Commit();
+        return model.Id;
+    }
+
+    public async Task DeleteModelAsync(int modelId)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = "DELETE FROM Models WHERE ModelId = @id;";
+        command.Parameters.AddWithValue("@id", modelId);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    public async Task SaveMeshAsync(int modelId, Mesh mesh)
+    {
+        var (verticesJson, indicesJson, normalsJson) = MeshJson.Serialize(mesh);
+
+        using var connection = _connectionFactory.CreateConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO MeshCache (ModelId, VerticesJson, IndicesJson, NormalsJson, GeneratedDate)
+            VALUES (@modelId, @vertices, @indices, @normals, datetime('now'))
+            ON CONFLICT(ModelId) DO UPDATE SET
+                VerticesJson = excluded.VerticesJson,
+                IndicesJson = excluded.IndicesJson,
+                NormalsJson = excluded.NormalsJson,
+                GeneratedDate = excluded.GeneratedDate;
+            """;
+        command.Parameters.AddWithValue("@modelId", modelId);
+        command.Parameters.AddWithValue("@vertices", verticesJson);
+        command.Parameters.AddWithValue("@indices", indicesJson);
+        command.Parameters.AddWithValue("@normals", normalsJson);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    public async Task<Mesh?> GetMeshAsync(int modelId)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT VerticesJson, IndicesJson, NormalsJson FROM MeshCache WHERE ModelId = @id;";
+        command.Parameters.AddWithValue("@id", modelId);
+
+        using var reader = await command.ExecuteReaderAsync();
+        if (!await reader.ReadAsync())
+        {
+            return null;
+        }
+
+        return MeshJson.Deserialize(reader.GetString(0), reader.GetString(1), reader.GetString(2));
+    }
+
+    private static void AddModelParameters(SqliteCommand command, Model model)
+    {
+        command.Parameters.AddWithValue("@name", model.Name);
+        command.Parameters.AddWithValue("@shapeType", (int)model.ShapeType);
+        command.Parameters.AddWithValue("@shapeSize", model.ShapeSize);
+        command.Parameters.AddWithValue("@shapeHeight", model.ShapeHeight);
+        command.Parameters.AddWithValue("@shapeThickness", model.ShapeThickness);
+        command.Parameters.AddWithValue("@borderThickness", model.BorderThickness);
+        command.Parameters.AddWithValue("@borderHeight", model.BorderHeight);
+    }
+
+    private static Model ReadModel(SqliteDataReader reader) => new()
+    {
+        Id = reader.GetInt32(reader.GetOrdinal("ModelId")),
+        Name = reader.GetString(reader.GetOrdinal("Name")),
+        ShapeType = (ShapeType)reader.GetInt32(reader.GetOrdinal("ShapeType")),
+        ShapeSize = (float)reader.GetDouble(reader.GetOrdinal("ShapeSize")),
+        ShapeHeight = (float)reader.GetDouble(reader.GetOrdinal("ShapeHeight")),
+        ShapeThickness = (float)reader.GetDouble(reader.GetOrdinal("ShapeThickness")),
+        BorderThickness = (float)reader.GetDouble(reader.GetOrdinal("BorderThickness")),
+        BorderHeight = (float)reader.GetDouble(reader.GetOrdinal("BorderHeight")),
+        CreatedDate = reader.GetDateTime(reader.GetOrdinal("CreatedDate")),
+        ModifiedDate = reader.GetDateTime(reader.GetOrdinal("ModifiedDate"))
+    };
+
+    private static async Task<List<TextLine>> LoadTextLinesAsync(SqliteConnection connection, int modelId)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT * FROM TextLines WHERE ModelId = @id ORDER BY LineNumber;";
+        command.Parameters.AddWithValue("@id", modelId);
+
+        var lines = new List<TextLine>();
+        using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            lines.Add(new TextLine
+            {
+                Id = reader.GetInt32(reader.GetOrdinal("TextLineId")),
+                LineNumber = reader.GetInt32(reader.GetOrdinal("LineNumber")),
+                Content = reader.GetString(reader.GetOrdinal("Content")),
+                FontName = reader.GetString(reader.GetOrdinal("FontName")),
+                FontSize = (float)reader.GetDouble(reader.GetOrdinal("FontSize")),
+                TextHeight = (float)reader.GetDouble(reader.GetOrdinal("TextHeight")),
+                PositionMode = (TextPositionMode)reader.GetInt32(reader.GetOrdinal("PositionMode")),
+                PositionX = reader.IsDBNull(reader.GetOrdinal("PositionX")) ? 0 : (float)reader.GetDouble(reader.GetOrdinal("PositionX")),
+                PositionY = reader.IsDBNull(reader.GetOrdinal("PositionY")) ? 0 : (float)reader.GetDouble(reader.GetOrdinal("PositionY")),
+                PositionZ = reader.IsDBNull(reader.GetOrdinal("PositionZ")) ? 0 : (float)reader.GetDouble(reader.GetOrdinal("PositionZ")),
+                RotationZ = (float)reader.GetDouble(reader.GetOrdinal("RotationZ"))
+            });
+        }
+        return lines;
+    }
+}
