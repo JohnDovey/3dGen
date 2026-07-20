@@ -1,3 +1,5 @@
+using System.Drawing;
+
 namespace ModelGenerator.Core.Models;
 
 public class Model
@@ -16,7 +18,11 @@ public class Model
     public float BorderThickness { get; set; } = 5f;
     public float BorderHeight { get; set; } = 5f;
 
+    public int BaseColorArgb { get; set; } = Color.LightSteelBlue.ToArgb();
+    public int BorderColorArgb { get; set; } = Color.LightSteelBlue.ToArgb();
+
     public List<TextLine> TextLines { get; set; } = new();
+    public List<SvgInsert> SvgInserts { get; set; } = new();
 
     public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
     public DateTime ModifiedDate { get; set; } = DateTime.UtcNow;

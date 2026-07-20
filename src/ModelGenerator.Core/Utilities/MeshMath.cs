@@ -1,4 +1,5 @@
 using System.Numerics;
+using LibTessDotNet;
 using ModelGenerator.Core.Models;
 
 namespace ModelGenerator.Core.Utilities;
@@ -6,6 +7,59 @@ namespace ModelGenerator.Core.Utilities;
 /// <summary>Extrusion helpers shared by the shape generators.</summary>
 public static class MeshMath
 {
+    /// <summary>Tessellates a set of 2D contours (handling holes/counters via the nonzero winding
+    /// rule — e.g. the counter of a letter "O", or a cutout in an SVG) and extrudes the result
+    /// into a solid slab between zBottom and zTop, with flat top/bottom caps and vertical side
+    /// walls per contour. Shared by text and SVG mesh conversion.</summary>
+    public static Mesh ExtrudeContours(IReadOnlyList<IReadOnlyList<Vector2>> contours, float zBottom, float zTop)
+    {
+        var mesh = new Mesh();
+        if (contours.Count == 0)
+        {
+            return mesh;
+        }
+
+        var tess = new Tess();
+        foreach (var contour in contours)
+        {
+            var contourVertices = contour
+                .Select(p => new ContourVertex { Position = new Vec3 { X = p.X, Y = p.Y, Z = 0 } })
+                .ToArray();
+            tess.AddContour(contourVertices);
+        }
+        tess.Tessellate(WindingRule.NonZero, ElementType.Polygons, 3);
+
+        for (int i = 0; i < tess.ElementCount; i++)
+        {
+            var v0 = tess.Vertices[tess.Elements[i * 3]].Position;
+            var v1 = tess.Vertices[tess.Elements[i * 3 + 1]].Position;
+            var v2 = tess.Vertices[tess.Elements[i * 3 + 2]].Position;
+
+            // Top cap.
+            mesh.AddTriangle(
+                new Vector3(v0.X, v0.Y, zTop),
+                new Vector3(v1.X, v1.Y, zTop),
+                new Vector3(v2.X, v2.Y, zTop));
+
+            // Bottom cap (reversed winding to face down).
+            mesh.AddTriangle(
+                new Vector3(v0.X, v0.Y, zBottom),
+                new Vector3(v2.X, v2.Y, zBottom),
+                new Vector3(v1.X, v1.Y, zBottom));
+        }
+
+        // Side walls per contour. Outer boundaries and hole (counter) boundaries are wound in
+        // opposite directions by the nonzero fill convention, so a single sign check on each
+        // contour's own signed area is enough to orient every wall outward.
+        foreach (var contour in contours)
+        {
+            bool outward = SignedArea(contour) > 0;
+            AddSideWall(mesh, contour, zBottom, zTop, outward);
+        }
+
+        return mesh;
+    }
+
     /// <summary>Extrudes a simple, convex (or star-shaped-from-centroid) 2D outline into a solid
     /// slab between zBottom and zTop, with flat top/bottom caps and vertical side walls.</summary>
     public static Mesh ExtrudeSolid(IReadOnlyList<Vector2> outline, float zBottom, float zTop)

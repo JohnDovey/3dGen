@@ -11,4 +11,9 @@ public interface IShapeGenerator
 
     /// <summary>Dispatches to the matching Generate* method based on the model's ShapeType.</summary>
     Mesh Generate(Model model);
+
+    /// <summary>Same shape as Generate(Model), but with the floor slab and the raised border
+    /// ring kept as separate meshes instead of merged — lets the UI color/render them
+    /// independently. Dispatches by the model's ShapeType, mirroring Generate(Model).</summary>
+    (Mesh Floor, Mesh Border) GenerateParts(Model model);
 }

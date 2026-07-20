@@ -1,3 +1,4 @@
+using ModelGenerator.Core.Models;
 using ModelGenerator.Core.Services;
 using ModelGenerator.Core.Utilities;
 using Xunit;
@@ -80,5 +81,38 @@ public class ShapeGeneratorTests
     {
         Assert.Throws<ArgumentException>(() =>
             _generator.GenerateShield(size: 20, thickness: 10, borderThickness: 15, borderHeight: 5));
+    }
+
+    [Theory]
+    [InlineData(ShapeType.Circle)]
+    [InlineData(ShapeType.Rectangle)]
+    [InlineData(ShapeType.Triangle)]
+    [InlineData(ShapeType.Shield)]
+    public void GenerateParts_FloorAndBorderAreEachWatertight(ShapeType shapeType)
+    {
+        var model = new Model { ShapeType = shapeType, ShapeSize = 60, ShapeHeight = 50 };
+
+        var (floor, border) = _generator.GenerateParts(model);
+
+        Assert.NotEmpty(floor.Vertices);
+        Assert.NotEmpty(border.Vertices);
+        Assert.True(MeshMath.SignedVolume(floor) > 0);
+        Assert.True(MeshMath.SignedVolume(border) > 0);
+    }
+
+    [Theory]
+    [InlineData(ShapeType.Circle)]
+    [InlineData(ShapeType.Rectangle)]
+    [InlineData(ShapeType.Triangle)]
+    [InlineData(ShapeType.Shield)]
+    public void GenerateParts_IsLosslessRelativeToTheMergedGenerate(ShapeType shapeType)
+    {
+        var model = new Model { ShapeType = shapeType, ShapeSize = 60, ShapeHeight = 50 };
+
+        var (floor, border) = _generator.GenerateParts(model);
+        var merged = _generator.Generate(model);
+
+        Assert.Equal(merged.Vertices.Count, floor.Vertices.Count + border.Vertices.Count);
+        Assert.Equal(merged.Indices.Count, floor.Indices.Count + border.Indices.Count);
     }
 }

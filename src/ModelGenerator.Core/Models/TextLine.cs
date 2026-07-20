@@ -1,6 +1,8 @@
+using System.Drawing;
+
 namespace ModelGenerator.Core.Models;
 
-public class TextLine
+public class TextLine : IPositionable
 {
     public int Id { get; set; }
     public int LineNumber { get; set; }
@@ -18,4 +20,6 @@ public class TextLine
     public float PositionY { get; set; }
     public float PositionZ { get; set; }
     public float RotationZ { get; set; }
+
+    public int ColorArgb { get; set; } = Color.DarkOrange.ToArgb();
 }

@@ -17,7 +17,44 @@ public class ShapeGenerator : IShapeGenerator
         _ => throw new ArgumentOutOfRangeException(nameof(model), model.ShapeType, "Unknown shape type.")
     };
 
+    public (Mesh Floor, Mesh Border) GenerateParts(Model model) => model.ShapeType switch
+    {
+        ShapeType.Circle => BuildCircleParts(model.ShapeSize, model.ShapeThickness, model.BorderThickness, model.BorderHeight),
+        ShapeType.Rectangle => BuildRectangleParts(model.ShapeSize, model.ShapeHeight, model.ShapeThickness, model.BorderThickness, model.BorderHeight),
+        ShapeType.Triangle => BuildTriangleParts(model.ShapeSize, model.ShapeThickness, model.BorderThickness, model.BorderHeight),
+        ShapeType.Shield => BuildShieldParts(model.ShapeSize, model.ShapeThickness, model.BorderThickness, model.BorderHeight),
+        _ => throw new ArgumentOutOfRangeException(nameof(model), model.ShapeType, "Unknown shape type.")
+    };
+
     public Mesh GenerateCircle(float diameter, float thickness, float borderThickness, float borderHeight)
+    {
+        var (floor, border) = BuildCircleParts(diameter, thickness, borderThickness, borderHeight);
+        floor.Append(border);
+        return floor;
+    }
+
+    public Mesh GenerateRectangle(float width, float height, float thickness, float borderThickness, float borderHeight)
+    {
+        var (floor, border) = BuildRectangleParts(width, height, thickness, borderThickness, borderHeight);
+        floor.Append(border);
+        return floor;
+    }
+
+    public Mesh GenerateTriangle(float size, float thickness, float borderThickness, float borderHeight)
+    {
+        var (floor, border) = BuildTriangleParts(size, thickness, borderThickness, borderHeight);
+        floor.Append(border);
+        return floor;
+    }
+
+    public Mesh GenerateShield(float size, float thickness, float borderThickness, float borderHeight)
+    {
+        var (floor, border) = BuildShieldParts(size, thickness, borderThickness, borderHeight);
+        floor.Append(border);
+        return floor;
+    }
+
+    private static (Mesh Floor, Mesh Border) BuildCircleParts(float diameter, float thickness, float borderThickness, float borderHeight)
     {
         float outerRadius = diameter / 2f;
         float innerRadius = outerRadius - borderThickness;
@@ -29,12 +66,12 @@ public class ShapeGenerator : IShapeGenerator
         var outer = CircleOutline(outerRadius);
         var inner = CircleOutline(innerRadius);
 
-        var mesh = MeshMath.ExtrudeSolid(outer, 0, thickness);
-        mesh.Append(MeshMath.ExtrudeRing(outer, inner, thickness, thickness + borderHeight));
-        return mesh;
+        var floor = MeshMath.ExtrudeSolid(outer, 0, thickness);
+        var border = MeshMath.ExtrudeRing(outer, inner, thickness, thickness + borderHeight);
+        return (floor, border);
     }
 
-    public Mesh GenerateRectangle(float width, float height, float thickness, float borderThickness, float borderHeight)
+    private static (Mesh Floor, Mesh Border) BuildRectangleParts(float width, float height, float thickness, float borderThickness, float borderHeight)
     {
         if (borderThickness * 2 >= width || borderThickness * 2 >= height)
         {
@@ -44,12 +81,12 @@ public class ShapeGenerator : IShapeGenerator
         var outer = RectangleOutline(width, height);
         var inner = RectangleOutline(width - 2 * borderThickness, height - 2 * borderThickness);
 
-        var mesh = MeshMath.ExtrudeSolid(outer, 0, thickness);
-        mesh.Append(MeshMath.ExtrudeRing(outer, inner, thickness, thickness + borderHeight));
-        return mesh;
+        var floor = MeshMath.ExtrudeSolid(outer, 0, thickness);
+        var border = MeshMath.ExtrudeRing(outer, inner, thickness, thickness + borderHeight);
+        return (floor, border);
     }
 
-    public Mesh GenerateTriangle(float size, float thickness, float borderThickness, float borderHeight)
+    private static (Mesh Floor, Mesh Border) BuildTriangleParts(float size, float thickness, float borderThickness, float borderHeight)
     {
         // Equilateral triangle, centroid at the origin, "size" = side length.
         float height = size * MathF.Sqrt(3) / 2f;
@@ -74,19 +111,19 @@ public class ShapeGenerator : IShapeGenerator
         float scale = (inradius - borderThickness) / inradius;
         var inner = outer.Select(p => p * scale).ToList();
 
-        var mesh = MeshMath.ExtrudeSolid(outer, 0, thickness);
-        mesh.Append(MeshMath.ExtrudeRing(outer, inner, thickness, thickness + borderHeight));
-        return mesh;
+        var floor = MeshMath.ExtrudeSolid(outer, 0, thickness);
+        var border = MeshMath.ExtrudeRing(outer, inner, thickness, thickness + borderHeight);
+        return (floor, border);
     }
 
-    public Mesh GenerateShield(float size, float thickness, float borderThickness, float borderHeight)
+    private static (Mesh Floor, Mesh Border) BuildShieldParts(float size, float thickness, float borderThickness, float borderHeight)
     {
         var outer = ShieldOutline(size);
         var inner = RadialInset(outer, borderThickness, "shield");
 
-        var mesh = MeshMath.ExtrudeSolid(outer, 0, thickness);
-        mesh.Append(MeshMath.ExtrudeRing(outer, inner, thickness, thickness + borderHeight));
-        return mesh;
+        var floor = MeshMath.ExtrudeSolid(outer, 0, thickness);
+        var border = MeshMath.ExtrudeRing(outer, inner, thickness, thickness + borderHeight);
+        return (floor, border);
     }
 
     private static List<Vector2> CircleOutline(float radius)

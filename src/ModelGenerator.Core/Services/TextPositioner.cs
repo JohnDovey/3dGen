@@ -38,17 +38,17 @@ public class TextPositioner : ITextPositioner
         return transforms;
     }
 
-    /// <summary>Uses the text line's stored X/Y/Z as absolute world coordinates — the coordinate
+    /// <summary>Uses the item's stored X/Y/Z as absolute world coordinates — the coordinate
     /// space the live 3D preview's drag-and-drop operates in.</summary>
-    public Transform ApplyManualOffset(TextLine textLine) =>
-        new(new Vector3(textLine.PositionX, textLine.PositionY, textLine.PositionZ), DegreesToRadians(textLine.RotationZ));
+    public Transform ApplyManualOffset(IPositionable item) =>
+        new(new Vector3(item.PositionX, item.PositionY, item.PositionZ), DegreesToRadians(item.RotationZ));
 
-    /// <summary>Uses the text line's stored X/Y as an offset from the shape's center, and Z as an
+    /// <summary>Uses the item's stored X/Y as an offset from the shape's center, and Z as an
     /// air-gap above the shape's top surface — re-appliable if the shape is resized.</summary>
-    public Transform CalculateRelativeCoords(TextLine textLine, Model model) =>
+    public Transform CalculateRelativeCoords(IPositionable item, Model model) =>
         new(
-            new Vector3(textLine.PositionX, textLine.PositionY, model.ShapeThickness + textLine.PositionZ),
-            DegreesToRadians(textLine.RotationZ));
+            new Vector3(item.PositionX, item.PositionY, model.ShapeThickness + item.PositionZ),
+            DegreesToRadians(item.RotationZ));
 
     private static float DegreesToRadians(float degrees) => degrees * MathF.PI / 180f;
 }
