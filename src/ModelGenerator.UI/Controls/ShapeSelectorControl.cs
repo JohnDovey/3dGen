@@ -11,7 +11,12 @@ public class ShapeSelectorControl : UserControl
     private readonly NumericUpDown _thicknessInput = MakeNumeric(10);
     private readonly NumericUpDown _borderThicknessInput = MakeNumeric(5);
     private readonly NumericUpDown _borderHeightInput = MakeNumeric(5);
+    private readonly Button _baseColorButton = new() { Text = "Color", Width = 50, AutoSize = false };
+    private readonly Button _borderColorButton = new() { Text = "Color", Width = 50, AutoSize = false };
     private readonly Label _heightLabel;
+
+    private int _baseColorArgb = Color.LightSteelBlue.ToArgb();
+    private int _borderColorArgb = Color.LightSteelBlue.ToArgb();
 
     public event EventHandler? ValuesChanged;
 
@@ -49,9 +54,17 @@ public class ShapeSelectorControl : UserControl
         layout.Controls.Add(new Label { Text = "Border height (mm)", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 5);
         layout.Controls.Add(_borderHeightInput, 1, 5);
 
+        layout.Controls.Add(new Label { Text = "Base color", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 6);
+        layout.Controls.Add(_baseColorButton, 1, 6);
+
+        layout.Controls.Add(new Label { Text = "Border color", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 7);
+        layout.Controls.Add(_borderColorButton, 1, 7);
+
         Controls.Add(layout);
         Dock = DockStyle.Top;
         AutoSize = true;
+
+        UpdateColorButtonSwatches();
 
         _shapeTypeCombo.SelectedIndexChanged += (_, _) => { UpdateHeightFieldState(); RaiseValuesChanged(); };
         _sizeInput.ValueChanged += (_, _) => RaiseValuesChanged();
@@ -59,6 +72,8 @@ public class ShapeSelectorControl : UserControl
         _thicknessInput.ValueChanged += (_, _) => RaiseValuesChanged();
         _borderThicknessInput.ValueChanged += (_, _) => RaiseValuesChanged();
         _borderHeightInput.ValueChanged += (_, _) => RaiseValuesChanged();
+        _baseColorButton.Click += (_, _) => PickColor(isBase: true);
+        _borderColorButton.Click += (_, _) => PickColor(isBase: false);
 
         UpdateHeightFieldState();
     }
@@ -78,6 +93,8 @@ public class ShapeSelectorControl : UserControl
         model.ShapeThickness = ShapeThickness;
         model.BorderThickness = BorderThickness;
         model.BorderHeight = BorderHeight;
+        model.BaseColorArgb = _baseColorArgb;
+        model.BorderColorArgb = _borderColorArgb;
     }
 
     /// <summary>Populates the controls from a persisted Model (inverse of ApplyTo).</summary>
@@ -89,7 +106,36 @@ public class ShapeSelectorControl : UserControl
         _thicknessInput.Value = ClampToRange(_thicknessInput, (decimal)model.ShapeThickness);
         _borderThicknessInput.Value = ClampToRange(_borderThicknessInput, (decimal)model.BorderThickness);
         _borderHeightInput.Value = ClampToRange(_borderHeightInput, (decimal)model.BorderHeight);
+        _baseColorArgb = model.BaseColorArgb;
+        _borderColorArgb = model.BorderColorArgb;
+        UpdateColorButtonSwatches();
         UpdateHeightFieldState();
+    }
+
+    private void PickColor(bool isBase)
+    {
+        using var dialog = new ColorDialog { Color = Color.FromArgb(isBase ? _baseColorArgb : _borderColorArgb) };
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        if (isBase)
+        {
+            _baseColorArgb = dialog.Color.ToArgb();
+        }
+        else
+        {
+            _borderColorArgb = dialog.Color.ToArgb();
+        }
+        UpdateColorButtonSwatches();
+        RaiseValuesChanged();
+    }
+
+    private void UpdateColorButtonSwatches()
+    {
+        _baseColorButton.BackColor = Color.FromArgb(_baseColorArgb);
+        _borderColorButton.BackColor = Color.FromArgb(_borderColorArgb);
     }
 
     private static decimal ClampToRange(NumericUpDown input, decimal value) =>

@@ -1,18 +1,15 @@
-using System.Drawing.Text;
 using ModelGenerator.Core.Models;
+using ModelGenerator.Core.Services;
 
 namespace ModelGenerator.UI.Controls;
 
-/// <summary>One row of the text editor: content, font, size, emboss height, and position mode
-/// with its associated X/Y/Z/rotation fields (only meaningful for Manual/Relative).</summary>
-public class TextLineEditorControl : UserControl
+/// <summary>One row of the SVG inserts editor: thumbnail, scale, emboss height, color, and
+/// position mode with its associated X/Y/Z/rotation fields — mirrors TextLineEditorControl.</summary>
+public class SvgInsertEditorControl : UserControl
 {
-    private static readonly string[] FontNames = LoadInstalledFontNames();
-
-    private readonly TextBox _contentBox = new() { Width = 140 };
-    private readonly ComboBox _fontCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 110 };
-    private readonly NumericUpDown _fontSizeInput = MakeNumeric(12, min: 2, max: 200);
-    private readonly NumericUpDown _textHeightInput = MakeNumeric(5, min: 0.2m, max: 50);
+    private readonly PictureBox _thumbnail = new() { Width = 48, Height = 48, SizeMode = PictureBoxSizeMode.Zoom, BorderStyle = BorderStyle.FixedSingle };
+    private readonly NumericUpDown _scaleInput = MakeNumeric(40, min: 1, max: 500);
+    private readonly NumericUpDown _embossHeightInput = MakeNumeric(5, min: 0.2m, max: 50);
     private readonly Button _colorButton = new() { Text = "Color", Width = 50, AutoSize = false };
     private readonly ComboBox _positionModeCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 95 };
     private readonly NumericUpDown _positionXInput = MakeNumeric(0, min: -500, max: 500);
@@ -21,6 +18,8 @@ public class TextLineEditorControl : UserControl
     private readonly NumericUpDown _rotationZInput = MakeNumeric(0, min: -360, max: 360);
     private readonly Button _removeButton = new() { Text = "Remove", AutoSize = true };
 
+    private string? _sourceFileName;
+    private string _svgContent = string.Empty;
     private int _colorArgb = Color.DarkOrange.ToArgb();
 
     public event EventHandler? Changed;
@@ -30,14 +29,8 @@ public class TextLineEditorControl : UserControl
     [System.ComponentModel.Browsable(false)]
     public int LineNumber { get; set; }
 
-    public TextLineEditorControl()
+    public SvgInsertEditorControl()
     {
-        _fontCombo.Items.AddRange(FontNames);
-        _fontCombo.SelectedIndex = Math.Max(0, Array.IndexOf(FontNames, "Arial"));
-        _fontCombo.DrawMode = DrawMode.OwnerDrawFixed;
-        _fontCombo.ItemHeight = 18;
-        _fontCombo.DrawItem += FontCombo_DrawItem;
-
         _positionModeCombo.Items.AddRange(Enum.GetNames<TextPositionMode>());
         _positionModeCombo.SelectedIndex = 0;
         UpdateColorButtonSwatch();
@@ -50,10 +43,9 @@ public class TextLineEditorControl : UserControl
             Padding = new Padding(4)
         };
 
-        layout.Controls.Add(Labeled("Text", _contentBox));
-        layout.Controls.Add(Labeled("Font", _fontCombo));
-        layout.Controls.Add(Labeled("Size", _fontSizeInput));
-        layout.Controls.Add(Labeled("Emboss (mm)", _textHeightInput));
+        layout.Controls.Add(_thumbnail);
+        layout.Controls.Add(Labeled("Scale (mm)", _scaleInput));
+        layout.Controls.Add(Labeled("Emboss (mm)", _embossHeightInput));
         layout.Controls.Add(Labeled("Color", _colorButton));
         layout.Controls.Add(Labeled("Position", _positionModeCombo));
         layout.Controls.Add(Labeled("X", _positionXInput));
@@ -63,15 +55,13 @@ public class TextLineEditorControl : UserControl
         layout.Controls.Add(_removeButton);
 
         Controls.Add(layout);
-        // No Dock here: TextLinesPanel positions rows manually (Location/Width) so newly added
-        // rows append below existing ones instead of jumping to the top of the stack.
+        // No Dock here: SvgInsertsPanel positions rows manually (Location/Width), same reason as
+        // TextLineEditorControl.
         AutoSize = true;
         BorderStyle = BorderStyle.FixedSingle;
 
-        _contentBox.TextChanged += (_, _) => RaiseChanged();
-        _fontCombo.SelectedIndexChanged += (_, _) => RaiseChanged();
-        _fontSizeInput.ValueChanged += (_, _) => RaiseChanged();
-        _textHeightInput.ValueChanged += (_, _) => RaiseChanged();
+        _scaleInput.ValueChanged += (_, _) => RaiseChanged();
+        _embossHeightInput.ValueChanged += (_, _) => RaiseChanged();
         _colorButton.Click += (_, _) => PickColor();
         _positionModeCombo.SelectedIndexChanged += (_, _) => { UpdatePositionFieldsState(); RaiseChanged(); };
         _positionXInput.ValueChanged += (_, _) => RaiseChanged();
@@ -83,13 +73,23 @@ public class TextLineEditorControl : UserControl
         UpdatePositionFieldsState();
     }
 
-    public TextLine ToTextLine() => new()
+    /// <summary>Sets the SVG content/source and re-renders the thumbnail — called right after
+    /// construction when this row is created from a library selection.</summary>
+    public void SetSvgSource(ISvgLibraryService svgLibrary, string? sourceFileName, string svgContent)
+    {
+        _sourceFileName = sourceFileName;
+        _svgContent = svgContent;
+        RenderThumbnail(svgLibrary, svgContent);
+        RaiseChanged();
+    }
+
+    public SvgInsert ToSvgInsert() => new()
     {
         LineNumber = LineNumber,
-        Content = _contentBox.Text,
-        FontName = (string)_fontCombo.SelectedItem!,
-        FontSize = (float)_fontSizeInput.Value,
-        TextHeight = (float)_textHeightInput.Value,
+        SourceFileName = _sourceFileName,
+        SvgContent = _svgContent,
+        Scale = (float)_scaleInput.Value,
+        EmbossHeight = (float)_embossHeightInput.Value,
         ColorArgb = _colorArgb,
         PositionMode = Enum.Parse<TextPositionMode>((string)_positionModeCombo.SelectedItem!),
         PositionX = (float)_positionXInput.Value,
@@ -98,35 +98,48 @@ public class TextLineEditorControl : UserControl
         RotationZ = (float)_rotationZInput.Value
     };
 
-    /// <summary>Populates the row's controls from a persisted TextLine (inverse of ToTextLine).</summary>
-    public void LoadFrom(TextLine line)
+    /// <summary>Populates the row's controls from a persisted SvgInsert (inverse of ToSvgInsert).</summary>
+    public void LoadFrom(ISvgLibraryService svgLibrary, SvgInsert insert)
     {
-        _contentBox.Text = line.Content;
-
-        int fontIndex = Array.IndexOf(FontNames, line.FontName);
-        _fontCombo.SelectedIndex = fontIndex >= 0 ? fontIndex : Math.Max(0, Array.IndexOf(FontNames, "Arial"));
-
-        _fontSizeInput.Value = ClampToRange(_fontSizeInput, (decimal)line.FontSize);
-        _textHeightInput.Value = ClampToRange(_textHeightInput, (decimal)line.TextHeight);
-        _colorArgb = line.ColorArgb;
+        _sourceFileName = insert.SourceFileName;
+        _svgContent = insert.SvgContent;
+        _colorArgb = insert.ColorArgb;
         UpdateColorButtonSwatch();
-        _positionModeCombo.SelectedIndex = (int)line.PositionMode;
-        _positionXInput.Value = ClampToRange(_positionXInput, (decimal)line.PositionX);
-        _positionYInput.Value = ClampToRange(_positionYInput, (decimal)line.PositionY);
-        _positionZInput.Value = ClampToRange(_positionZInput, (decimal)line.PositionZ);
-        _rotationZInput.Value = ClampToRange(_rotationZInput, (decimal)line.RotationZ);
+        RenderThumbnail(svgLibrary, insert.SvgContent);
+
+        _scaleInput.Value = ClampToRange(_scaleInput, (decimal)insert.Scale);
+        _embossHeightInput.Value = ClampToRange(_embossHeightInput, (decimal)insert.EmbossHeight);
+        _positionModeCombo.SelectedIndex = (int)insert.PositionMode;
+        _positionXInput.Value = ClampToRange(_positionXInput, (decimal)insert.PositionX);
+        _positionYInput.Value = ClampToRange(_positionYInput, (decimal)insert.PositionY);
+        _positionZInput.Value = ClampToRange(_positionZInput, (decimal)insert.PositionZ);
+        _rotationZInput.Value = ClampToRange(_rotationZInput, (decimal)insert.RotationZ);
 
         UpdatePositionFieldsState();
     }
 
-    /// <summary>Switches this line to Manual position mode and sets its absolute X/Y/Z (mm) —
-    /// used when the user drags this line's text in the 3D viewport.</summary>
+    /// <summary>Switches this insert to Manual position mode and sets its absolute X/Y/Z (mm) —
+    /// used when the user drags this insert in the 3D viewport.</summary>
     public void SetManualPosition(float x, float y, float z)
     {
         _positionModeCombo.SelectedIndex = (int)TextPositionMode.Manual;
         _positionXInput.Value = ClampToRange(_positionXInput, (decimal)x);
         _positionYInput.Value = ClampToRange(_positionYInput, (decimal)y);
         _positionZInput.Value = ClampToRange(_positionZInput, (decimal)z);
+    }
+
+    private void RenderThumbnail(ISvgLibraryService svgLibrary, string svgContent)
+    {
+        try
+        {
+            _thumbnail.Image?.Dispose();
+            _thumbnail.Image = svgLibrary.RenderThumbnail(svgContent, 48, 48);
+        }
+        catch (Exception)
+        {
+            // A malformed SVG must not crash the editor — leave the thumbnail blank.
+            _thumbnail.Image = null;
+        }
     }
 
     private void PickColor()
@@ -144,33 +157,6 @@ public class TextLineEditorControl : UserControl
 
     private static decimal ClampToRange(NumericUpDown input, decimal value) =>
         Math.Clamp(value, input.Minimum, input.Maximum);
-
-    private void FontCombo_DrawItem(object? sender, DrawItemEventArgs e)
-    {
-        if (e.Index < 0)
-        {
-            return;
-        }
-
-        e.DrawBackground();
-        string fontName = FontNames[e.Index];
-        using var font = TryCreateFont(fontName, 10.5f);
-        using var brush = new SolidBrush(e.ForeColor);
-        e.Graphics.DrawString(fontName, font, brush, e.Bounds);
-        e.DrawFocusRectangle();
-    }
-
-    private static Font TryCreateFont(string name, float size)
-    {
-        try
-        {
-            return new Font(name, size);
-        }
-        catch (ArgumentException)
-        {
-            return new Font(FontFamily.GenericSansSerif, size);
-        }
-    }
 
     private void UpdatePositionFieldsState()
     {
@@ -199,11 +185,4 @@ public class TextLineEditorControl : UserControl
         Value = value,
         Width = 60
     };
-
-    private static string[] LoadInstalledFontNames()
-    {
-        using var installed = new InstalledFontCollection();
-        var names = installed.Families.Select(f => f.Name).Distinct().OrderBy(n => n).ToArray();
-        return names.Length > 0 ? names : new[] { "Arial" };
-    }
 }

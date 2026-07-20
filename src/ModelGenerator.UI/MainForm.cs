@@ -14,6 +14,7 @@ public class MainForm : Form
 
     private readonly ShapeSelectorControl _shapeSelector = new();
     private readonly TextLinesPanel _textLinesPanel = new();
+    private readonly SvgInsertsPanel _svgInsertsPanel;
     private readonly HelixViewportHost _viewportHost = new() { Dock = DockStyle.Fill };
     private readonly Button _exportButton = new() { Text = "Export STL...", AutoSize = true };
     private readonly Label _statusLabel = new() { Dock = DockStyle.Bottom, AutoSize = false, Height = 40, Padding = new Padding(6) };
@@ -27,6 +28,7 @@ public class MainForm : Form
         _orchestrator = orchestrator;
         _repository = repository;
         _svgLibrary = svgLibrary;
+        _svgInsertsPanel = new SvgInsertsPanel(svgLibrary);
 
         Width = 1200;
         Height = 800;
@@ -44,6 +46,14 @@ public class MainForm : Form
             Padding = new Padding(8, 12, 0, 4),
             Font = new System.Drawing.Font(Font, System.Drawing.FontStyle.Bold)
         };
+        var svgInsertsLabel = new Label
+        {
+            Text = "SVG inserts",
+            AutoSize = true,
+            Dock = DockStyle.Top,
+            Padding = new Padding(8, 12, 0, 4),
+            Font = new System.Drawing.Font(Font, System.Drawing.FontStyle.Bold)
+        };
         _exportButton.Dock = DockStyle.Top;
         _exportButton.Margin = new Padding(8);
 
@@ -52,6 +62,8 @@ public class MainForm : Form
         // collapsed to ~1px wide). For same-edge Dock siblings, the LAST one added ends up
         // closest to that edge, so add these in reverse of the desired top-to-bottom order.
         leftPanel.Controls.Add(_exportButton);
+        leftPanel.Controls.Add(_svgInsertsPanel);
+        leftPanel.Controls.Add(svgInsertsLabel);
         leftPanel.Controls.Add(_textLinesPanel);
         leftPanel.Controls.Add(textLinesLabel);
         leftPanel.Controls.Add(_shapeSelector);
@@ -70,6 +82,7 @@ public class MainForm : Form
 
         _shapeSelector.ValuesChanged += (_, _) => RegeneratePreview();
         _textLinesPanel.LinesChanged += (_, _) => RegeneratePreview();
+        _svgInsertsPanel.InsertsChanged += (_, _) => RegeneratePreview();
         _exportButton.Click += (_, _) => ExportStl();
         _viewportHost.ItemDragged += (kind, index, x, y, z) =>
         {
@@ -77,7 +90,10 @@ public class MainForm : Form
             {
                 _textLinesPanel.UpdateLinePosition(index, x, y, z);
             }
-            // SvgInsert case wired once SvgInsertsPanel exists.
+            else
+            {
+                _svgInsertsPanel.UpdateInsertPosition(index, x, y, z);
+            }
         };
 
         _textLinesPanel.AddLine();
@@ -143,6 +159,7 @@ public class MainForm : Form
         _shapeSelector.LoadFrom(new Model());
         _textLinesPanel.Clear();
         _textLinesPanel.AddLine();
+        _svgInsertsPanel.Clear();
         UpdateTitle();
         RegeneratePreview();
     }
@@ -167,6 +184,7 @@ public class MainForm : Form
         _currentModelName = model.Name;
         _shapeSelector.LoadFrom(model);
         _textLinesPanel.LoadLines(model.TextLines);
+        _svgInsertsPanel.LoadInserts(model.SvgInserts);
         UpdateTitle();
         RegeneratePreview();
     }
@@ -214,6 +232,7 @@ public class MainForm : Form
         var model = new Model();
         _shapeSelector.ApplyTo(model);
         model.TextLines = _textLinesPanel.Lines;
+        model.SvgInserts = _svgInsertsPanel.Inserts;
         return model;
     }
 
