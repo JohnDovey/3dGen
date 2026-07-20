@@ -11,7 +11,13 @@ public class Mesh
 
     public void AddTriangle(Vector3 a, Vector3 b, Vector3 c)
     {
-        var normal = Vector3.Normalize(Vector3.Cross(b - a, c - a));
+        var cross = Vector3.Cross(b - a, c - a);
+        // A degenerate (zero-area) triangle — collinear or coincident points, which can arise
+        // from tessellation of thin/small features — has a zero cross product. Normalizing that
+        // divides by zero and produces NaN/Infinity, which then fails JSON serialization when the
+        // mesh is cached. Such a triangle contributes no visible area, so Vector3.Zero is a safe
+        // stand-in normal.
+        var normal = cross.LengthSquared() > 1e-12f ? Vector3.Normalize(cross) : Vector3.Zero;
         int baseIndex = Vertices.Count;
 
         Vertices.Add(a);
