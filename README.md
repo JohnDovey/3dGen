@@ -13,8 +13,10 @@ slice and print.
 ## Status
 
 Actively developed. All four initial phases (core geometry/STL export, text
-embossing, WinForms UI, and save/load) are done. See [`PLAN.md`](PLAN.md) for the
-full architecture write-up and phase-by-phase status.
+embossing, WinForms UI, and save/load) are done. See
+[`docs/PLAN.md`](docs/PLAN.md) for the full architecture write-up and
+phase-by-phase status, and [`docs/HOW_TO_USE.md`](docs/HOW_TO_USE.md) for a
+walkthrough of using the app.
 
 Known gaps:
 - Triangle and Shield shapes are not implemented yet (selecting them shows an
@@ -69,3 +71,7 @@ touching the geometry or persistence logic.
   outlines (including holes, e.g. the counter of a letter "O")
 - SQLite via `Microsoft.Data.Sqlite`
 - xUnit for tests
+
+## Copyright
+
+Copyright © John Dovey <dovey.john@gmail.com>

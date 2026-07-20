@@ -1,0 +1,87 @@
+# How to Use 3D Model Generator
+
+This guide walks through creating a simple embossed-text model and exporting it
+for 3D printing.
+
+## Launching the app
+
+Run `ModelGenerator.UI.exe` (or `dotnet run --project src/ModelGenerator.UI`).
+The main window opens with a default circular shape already previewed in the 3D
+viewport on the right:
+
+![Main window with the default circle shape](images/01-main-window.png)
+
+The window has three parts:
+- **Left panel** — shape parameters, text lines, and the Export STL button
+- **3D viewport** — a live preview of the model, viewed from directly above
+  (drag with the mouse to rotate/orbit; scroll to zoom)
+- **Status bar** — shows the current vertex/triangle count, or an error message
+  if the current settings can't be generated (e.g. a border thicker than the
+  shape itself)
+
+## 1. Choose a shape
+
+Under **Shape**, pick one of:
+
+- **Circle** — set its diameter under **Size (mm)**
+- **Rectangle** — set both **Size (mm)** (width) and **Height (mm)**
+- **Triangle** / **Shield** — not implemented yet; selecting one shows an error
+  in the status bar instead of a model
+
+Then set:
+- **Thickness (mm)** — how thick the flat base is
+- **Border thickness (mm)** — how wide the raised rim around the edge is
+- **Border height (mm)** — how far that rim is embossed above the base
+
+The 3D preview regenerates automatically every time you change a value.
+
+## 2. Add text
+
+Under **Text lines**, each row is one line of embossed text:
+
+- **Text** — the line's content
+- **Font** / **Size** — the font name (drawn in its own typeface in the
+  dropdown) and point size
+- **Emboss (mm)** — how far this line is raised above the shape's surface
+- **Position** — how this line is placed:
+  - **AutoCenter** — lines are stacked and centered automatically; this is the
+    default and needs no further input
+  - **Manual** — type absolute **X**, **Y**, **Z** (height above the base) and
+    **Rot°** (rotation) coordinates directly
+  - **Relative** — type **X**/**Y** as an offset from the shape's center, and
+    **Z** as an air-gap above the shape's surface; recalculates if the shape is
+    resized
+
+Click **+ Add Text Line** for more lines — each line can use a different font,
+size, and position mode. Click **Remove** on a row to delete it.
+
+![A circle with "HELLO" embossed and auto-centered](images/02-text-added.png)
+
+## 3. Save, open, and start a new model
+
+The **File** menu has:
+
+![File menu](images/03-file-menu.png)
+
+- **New** — resets everything back to the default circle with no text
+- **Open...** — lists models previously saved to the local SQLite database;
+  select one and click **Open**, or **Delete** to remove it
+- **Save** — saves the current model; prompts for a name the first time
+- **Save As...** — always prompts for a name and saves as a new model
+- **Export STL...** — see below
+- **Exit** — closes the app
+
+Saved models (including their generated mesh) live in a local SQLite database at
+`%LOCALAPPDATA%\ModelGenerator\models.sqlite`.
+
+## 4. Export to STL
+
+Click **Export STL...** (left panel or File menu) and choose where to save the
+`.stl` file. This exports the exact mesh currently shown in the preview, ready
+to open in a slicer (PrusaSlicer, Cura, etc.) and print.
+
+## About / version
+
+**Help → About** shows the app's version and copyright:
+
+![About dialog](images/04-about.png)
