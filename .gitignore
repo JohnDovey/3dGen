@@ -3,6 +3,7 @@ bin/
 obj/
 *.user
 .vs/
+dist/
 
 ## SQLite runtime data
 *.sqlite

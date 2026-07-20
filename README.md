@@ -12,15 +12,12 @@ slice and print.
 
 ## Status
 
-Actively developed. All five initial phases (core geometry/STL export, text
-embossing, WinForms UI, save/load, and the full shape set) are done. See
-[`docs/PLAN.md`](docs/PLAN.md) for the full architecture write-up and
-phase-by-phase status, and [`docs/HOW_TO_USE.md`](docs/HOW_TO_USE.md) for a
-walkthrough of using the app.
-
-Known gaps:
-- No drag-and-drop text positioning in the viewport yet (Manual/Relative position
-  modes take typed X/Y/Z/rotation values instead).
+Actively developed. Core geometry/STL export, text embossing, the WinForms UI,
+save/load, the full shape set, an in-app Help viewer, and drag-and-drop text
+positioning are all done. See [`docs/PLAN.md`](docs/PLAN.md) for the full
+architecture write-up and phase-by-phase status, and
+[`docs/HOW_TO_USE.md`](docs/HOW_TO_USE.md) for a walkthrough of using the app
+(also available in-app via Help → How to Use).
 
 ## Requirements
 
@@ -41,6 +38,19 @@ Run the test suite:
 ```
 dotnet test
 ```
+
+## Building a release
+
+```
+.\build-release.ps1
+```
+
+Runs the tests, then produces a Release, framework-dependent, win-x64 build and
+zips it to `dist/ModelGenerator-v<version>-win-x64.zip`. Framework-dependent
+means the .NET 10 Desktop Runtime is **not** bundled — anyone running the
+zipped app needs the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download)
+already installed. Pass `-SkipTests` to skip the test run, or `-Runtime <RID>`
+to target a different platform (e.g. `win-arm64`).
 
 ## Project layout
 
