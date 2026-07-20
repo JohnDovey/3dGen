@@ -25,8 +25,8 @@ Under **Shape**, pick one of:
 
 - **Circle** — set its diameter under **Size (mm)**
 - **Rectangle** — set both **Size (mm)** (width) and **Height (mm)**
-- **Triangle** / **Shield** — not implemented yet; selecting one shows an error
-  in the status bar instead of a model
+- **Triangle** — an equilateral triangle; **Size (mm)** sets the side length
+- **Shield** — a heraldic-style silhouette; **Size (mm)** sets the top-edge width
 
 Then set:
 - **Thickness (mm)** — how thick the flat base is

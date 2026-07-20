@@ -23,9 +23,16 @@
   New resets to defaults, Save persists to SQLite and updates the title, Open reloads a saved
   model's shape + text lines correctly.
 
+- **Phase 5 (done):** Triangle and Shield shape generation. Triangle uses an exact
+  incenter-based inset (constant-width border, same rigor as Circle/Rectangle — the incenter
+  and centroid coincide for a regular polygon). Shield uses a 7-point heraldic silhouette
+  (flat top, shoulder flare, tapering to a point) with a radial-from-centroid inset border —
+  an approximation rather than a true constant-width offset, since the shape is irregular, but
+  visually even and good enough for a decorative emboss. All four shapes from the original
+  spec are now implemented. 28 tests passing total.
+
 Remaining ideas (not currently planned as a phase): richer validation feedback in dialogs,
-Triangle/Shield shape implementations (still `NotImplementedException` stubs), drag-and-drop
-text positioning in the viewport.
+drag-and-drop text positioning in the viewport.
 
 
 Windows desktop app (Visual Studio / Windows Forms) to generate 3D-printable models:

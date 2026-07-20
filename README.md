@@ -3,24 +3,22 @@
 A Windows desktop app for designing simple 3D-printable models: pick a base shape,
 add embossed custom text, preview it in 3D, and export straight to STL.
 
-Choose a shape — circle or rectangle today, triangle and shield planned — with a
-raised border, then add one or more lines of embossed text with per-line font,
-size, and placement (auto-centered, manually positioned, or positioned relative to
-the shape). Preview the composed model live in a 3D viewport, save/load designs to
-a local SQLite database, and export the final mesh as a binary STL file ready to
+Choose a shape — circle, rectangle, triangle, or shield — with a raised border,
+then add one or more lines of embossed text with per-line font, size, and
+placement (auto-centered, manually positioned, or positioned relative to the
+shape). Preview the composed model live in a 3D viewport, save/load designs to a
+local SQLite database, and export the final mesh as a binary STL file ready to
 slice and print.
 
 ## Status
 
-Actively developed. All four initial phases (core geometry/STL export, text
-embossing, WinForms UI, and save/load) are done. See
+Actively developed. All five initial phases (core geometry/STL export, text
+embossing, WinForms UI, save/load, and the full shape set) are done. See
 [`docs/PLAN.md`](docs/PLAN.md) for the full architecture write-up and
 phase-by-phase status, and [`docs/HOW_TO_USE.md`](docs/HOW_TO_USE.md) for a
 walkthrough of using the app.
 
 Known gaps:
-- Triangle and Shield shapes are not implemented yet (selecting them shows an
-  error in the status bar instead of a model).
 - No drag-and-drop text positioning in the viewport yet (Manual/Relative position
   modes take typed X/Y/Z/rotation values instead).
 

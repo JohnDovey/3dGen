@@ -1,4 +1,5 @@
 using ModelGenerator.Core.Services;
+using ModelGenerator.Core.Utilities;
 using Xunit;
 
 namespace ModelGenerator.Tests;
@@ -44,16 +45,40 @@ public class ShapeGeneratorTests
     }
 
     [Fact]
-    public void GenerateTriangle_NotYetImplemented()
+    public void GenerateTriangle_ProducesWatertightMeshWithPositiveSignedVolume()
     {
-        Assert.Throws<NotImplementedException>(() =>
-            _generator.GenerateTriangle(size: 60, thickness: 10, borderThickness: 5, borderHeight: 5));
+        var mesh = _generator.GenerateTriangle(size: 60, thickness: 10, borderThickness: 5, borderHeight: 5);
+
+        Assert.NotEmpty(mesh.Vertices);
+        Assert.NotEmpty(mesh.Indices);
+        Assert.Equal(0, mesh.Indices.Count % 3);
+        Assert.All(mesh.Indices, i => Assert.InRange(i, 0, mesh.Vertices.Count - 1));
+        Assert.True(MeshMath.SignedVolume(mesh) > 0);
     }
 
     [Fact]
-    public void GenerateShield_NotYetImplemented()
+    public void GenerateTriangle_ThrowsWhenBorderTooWide()
     {
-        Assert.Throws<NotImplementedException>(() =>
-            _generator.GenerateShield(size: 60, thickness: 10, borderThickness: 5, borderHeight: 5));
+        Assert.Throws<ArgumentException>(() =>
+            _generator.GenerateTriangle(size: 20, thickness: 10, borderThickness: 15, borderHeight: 5));
+    }
+
+    [Fact]
+    public void GenerateShield_ProducesWatertightMeshWithPositiveSignedVolume()
+    {
+        var mesh = _generator.GenerateShield(size: 60, thickness: 10, borderThickness: 5, borderHeight: 5);
+
+        Assert.NotEmpty(mesh.Vertices);
+        Assert.NotEmpty(mesh.Indices);
+        Assert.Equal(0, mesh.Indices.Count % 3);
+        Assert.All(mesh.Indices, i => Assert.InRange(i, 0, mesh.Vertices.Count - 1));
+        Assert.True(MeshMath.SignedVolume(mesh) > 0);
+    }
+
+    [Fact]
+    public void GenerateShield_ThrowsWhenBorderTooWide()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            _generator.GenerateShield(size: 20, thickness: 10, borderThickness: 15, borderHeight: 5));
     }
 }

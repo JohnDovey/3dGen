@@ -51,14 +51,42 @@ public class ShapeGenerator : IShapeGenerator
 
     public Mesh GenerateTriangle(float size, float thickness, float borderThickness, float borderHeight)
     {
-        // TODO(Phase 2): implement triangle outline + inset border to match Circle/Rectangle.
-        throw new NotImplementedException("Triangle shape generation is planned for Phase 2.");
+        // Equilateral triangle, centroid at the origin, "size" = side length.
+        float height = size * MathF.Sqrt(3) / 2f;
+
+        // For a regular polygon, offsetting every edge inward by a constant distance is the
+        // same as scaling about the centroid by (inradius - offset) / inradius — the incenter
+        // and centroid coincide for a regular polygon, so this gives an exact constant-width
+        // border (unlike the radial vertex-distance approach used for the irregular Shield).
+        float inradius = height / 3f;
+        if (borderThickness >= inradius)
+        {
+            throw new ArgumentException("Border thickness is too large for this triangle's size.");
+        }
+
+        var outer = new List<Vector2>
+        {
+            new(0, 2f * height / 3f),
+            new(-size / 2f, -height / 3f),
+            new(size / 2f, -height / 3f)
+        };
+
+        float scale = (inradius - borderThickness) / inradius;
+        var inner = outer.Select(p => p * scale).ToList();
+
+        var mesh = MeshMath.ExtrudeSolid(outer, 0, thickness);
+        mesh.Append(MeshMath.ExtrudeRing(outer, inner, thickness, thickness + borderHeight));
+        return mesh;
     }
 
     public Mesh GenerateShield(float size, float thickness, float borderThickness, float borderHeight)
     {
-        // TODO(Phase 2): implement shield outline + inset border to match Circle/Rectangle.
-        throw new NotImplementedException("Shield shape generation is planned for Phase 2.");
+        var outer = ShieldOutline(size);
+        var inner = RadialInset(outer, borderThickness, "shield");
+
+        var mesh = MeshMath.ExtrudeSolid(outer, 0, thickness);
+        mesh.Append(MeshMath.ExtrudeRing(outer, inner, thickness, thickness + borderHeight));
+        return mesh;
     }
 
     private static List<Vector2> CircleOutline(float radius)
@@ -83,5 +111,52 @@ public class ShapeGenerator : IShapeGenerator
             new(hw, hh),
             new(-hw, hh)
         };
+    }
+
+    /// <summary>Classic heraldic-shield silhouette: flat top, a slight shoulder flare, tapering
+    /// to a single point at the bottom. "size" sets both the top-edge width and, via a fixed
+    /// aspect ratio, the overall height.</summary>
+    private static List<Vector2> ShieldOutline(float size)
+    {
+        float hw = size / 2f;
+        float topY = size * 0.45f;
+        float bottomY = -size * 0.75f;
+        float totalHeight = topY - bottomY;
+        float shoulderY = topY - totalHeight * 0.15f;
+        float midY = topY - totalHeight * 0.55f;
+
+        // CCW winding (matches Circle/Rectangle/Triangle): down the left side, across the
+        // bottom point, up the right side, and back along the top edge.
+        return new List<Vector2>
+        {
+            new(-hw, topY),
+            new(-hw * 1.05f, shoulderY),
+            new(-hw * 0.7f, midY),
+            new(0, bottomY),
+            new(hw * 0.7f, midY),
+            new(hw * 1.05f, shoulderY),
+            new(hw, topY)
+        };
+    }
+
+    /// <summary>Moves each vertex inward toward the centroid by insetDistance. Exact for a
+    /// regular polygon; for an irregular outline like the Shield, this is an approximation of a
+    /// true constant-width offset — good enough for a decorative embossed border, not
+    /// geometrically exact along every edge.</summary>
+    private static List<Vector2> RadialInset(IReadOnlyList<Vector2> outline, float insetDistance, string shapeName)
+    {
+        var centroid = MeshMath.Centroid(outline);
+        var result = new List<Vector2>(outline.Count);
+        foreach (var p in outline)
+        {
+            var toPoint = p - centroid;
+            float distance = toPoint.Length();
+            if (distance <= insetDistance)
+            {
+                throw new ArgumentException($"Border thickness is too large for this {shapeName}'s size.");
+            }
+            result.Add(centroid + toPoint * ((distance - insetDistance) / distance));
+        }
+        return result;
     }
 }
