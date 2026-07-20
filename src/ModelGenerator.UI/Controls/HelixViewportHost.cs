@@ -7,23 +7,43 @@ using WpfColor = System.Windows.Media.Color;
 
 namespace ModelGenerator.UI.Controls;
 
+/// <summary>A mesh with the color it should be rendered in — used for the shape's floor/border,
+/// which are colored but not individually draggable.</summary>
+public readonly record struct ColoredMesh(CoreMesh Mesh, WpfColor Color);
+
+/// <summary>Which kind of item a draggable visual represents, so a drag event can be routed back
+/// to the right panel (TextLinesPanel vs SvgInsertsPanel).</summary>
+public enum DraggableItemKind
+{
+    TextLine,
+    SvgInsert
+}
+
+/// <summary>A mesh with its own color that can be picked up and dragged in the viewport — a text
+/// line or an SVG insert. Index is that item's position within its own list (TextLines or
+/// SvgInserts), not a global index across both.</summary>
+public readonly record struct DraggableMesh(CoreMesh Mesh, WpfColor Color, DraggableItemKind Kind, int Index);
+
 /// <summary>Hosts a WPF HelixViewport3D inside the WinForms UI via ElementHost, converts Core
-/// Meshes into WPF 3D geometry, and supports dragging individual text-line visuals to
-/// reposition them (switches that line to Manual position mode).</summary>
+/// Meshes into WPF 3D geometry, and supports dragging individual text-line/SVG-insert visuals to
+/// reposition them (switches that item to Manual position mode). The shape's floor and border are
+/// rendered with their own colors but are never draggable.</summary>
 public class HelixViewportHost : UserControl
 {
     private readonly HelixViewport3D _viewport;
-    private readonly Dictionary<ModelVisual3D, int> _textVisualToLineIndex = new();
+    private readonly Dictionary<ModelVisual3D, (DraggableItemKind Kind, int Index)> _draggableVisualToItem = new();
 
-    private ModelVisual3D? _baseVisual;
+    private ModelVisual3D? _floorVisual;
+    private ModelVisual3D? _borderVisual;
     private bool _isDragging;
-    private int _draggedLineIndex = -1;
+    private DraggableItemKind _draggedKind;
+    private int _draggedIndex = -1;
     private double _dragPlaneZ;
 
-    /// <summary>Raised while dragging a text line's visual, with its new world X/Y/Z (mm) — Z is
-    /// the drag plane's Z (the shape's top surface), so callers can set an absolute position
-    /// without needing to separately track shape thickness.</summary>
-    public event Action<int, float, float, float>? TextLineDragged;
+    /// <summary>Raised while dragging an item's visual, with its new world X/Y/Z (mm) — Z is the
+    /// drag plane's Z (the shape's top surface), so callers can set an absolute position without
+    /// needing to separately track shape thickness.</summary>
+    public event Action<DraggableItemKind, int, float, float, float>? ItemDragged;
 
     public HelixViewportHost()
     {
@@ -56,20 +76,24 @@ public class HelixViewportHost : UserControl
         Controls.Add(elementHost);
     }
 
-    /// <summary>Renders the base shape and each text line as separate, individually pickable
-    /// visuals. dragPlaneZ is the world Z of the shape's top surface, used when dragging text.</summary>
-    public void ShowModel(CoreMesh baseMesh, IReadOnlyList<CoreMesh> textMeshes, WpfColor baseColor, WpfColor textColor, float dragPlaneZ)
+    /// <summary>Renders the shape's floor and border (each their own color, never draggable) and
+    /// every text/SVG item as a separate, individually pickable, individually colored visual.
+    /// dragPlaneZ is the world Z of the shape's top surface, used when dragging an item.</summary>
+    public void ShowModel(ColoredMesh floor, ColoredMesh border, IReadOnlyList<DraggableMesh> items, float dragPlaneZ)
     {
         Clear();
 
-        _baseVisual = new ModelVisual3D { Content = BuildModel(baseMesh, baseColor) };
-        _viewport.Children.Add(_baseVisual);
+        _floorVisual = new ModelVisual3D { Content = BuildModel(floor.Mesh, floor.Color) };
+        _viewport.Children.Add(_floorVisual);
 
-        for (int i = 0; i < textMeshes.Count; i++)
+        _borderVisual = new ModelVisual3D { Content = BuildModel(border.Mesh, border.Color) };
+        _viewport.Children.Add(_borderVisual);
+
+        foreach (var item in items)
         {
-            var visual = new ModelVisual3D { Content = BuildModel(textMeshes[i], textColor) };
+            var visual = new ModelVisual3D { Content = BuildModel(item.Mesh, item.Color) };
             _viewport.Children.Add(visual);
-            _textVisualToLineIndex[visual] = i;
+            _draggableVisualToItem[visual] = (item.Kind, item.Index);
         }
 
         _dragPlaneZ = dragPlaneZ;
@@ -77,26 +101,32 @@ public class HelixViewportHost : UserControl
 
     public void Clear()
     {
-        if (_baseVisual is not null)
+        if (_floorVisual is not null)
         {
-            _viewport.Children.Remove(_baseVisual);
-            _baseVisual = null;
+            _viewport.Children.Remove(_floorVisual);
+            _floorVisual = null;
         }
-        foreach (var visual in _textVisualToLineIndex.Keys)
+        if (_borderVisual is not null)
+        {
+            _viewport.Children.Remove(_borderVisual);
+            _borderVisual = null;
+        }
+        foreach (var visual in _draggableVisualToItem.Keys)
         {
             _viewport.Children.Remove(visual);
         }
-        _textVisualToLineIndex.Clear();
+        _draggableVisualToItem.Clear();
     }
 
     private void OnPreviewMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         var position = e.GetPosition(_viewport.Viewport);
         if (VisualTreeHelper.HitTest(_viewport.Viewport, position) is RayMeshGeometry3DHitTestResult { VisualHit: ModelVisual3D visual }
-            && _textVisualToLineIndex.TryGetValue(visual, out int lineIndex))
+            && _draggableVisualToItem.TryGetValue(visual, out var item))
         {
             _isDragging = true;
-            _draggedLineIndex = lineIndex;
+            _draggedKind = item.Kind;
+            _draggedIndex = item.Index;
             _viewport.Viewport.CaptureMouse();
             e.Handled = true; // suppress HelixViewport3D's default click-drag camera rotation
         }
@@ -114,7 +144,7 @@ public class HelixViewportHost : UserControl
         var planeNormal = new Vector3D(0, 0, 1);
         if (Viewport3DHelper.UnProject(_viewport.Viewport, position, planeOrigin, planeNormal) is Point3D worldPoint)
         {
-            TextLineDragged?.Invoke(_draggedLineIndex, (float)worldPoint.X, (float)worldPoint.Y, (float)_dragPlaneZ);
+            ItemDragged?.Invoke(_draggedKind, _draggedIndex, (float)worldPoint.X, (float)worldPoint.Y, (float)_dragPlaneZ);
         }
         e.Handled = true;
     }
@@ -127,7 +157,7 @@ public class HelixViewportHost : UserControl
         }
 
         _isDragging = false;
-        _draggedLineIndex = -1;
+        _draggedIndex = -1;
         _viewport.Viewport.ReleaseMouseCapture();
         e.Handled = true;
     }

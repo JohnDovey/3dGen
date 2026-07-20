@@ -1,4 +1,3 @@
-using System.Windows.Media;
 using ModelGenerator.Core.Models;
 using ModelGenerator.Core.Services;
 using ModelGenerator.Data.Repository;
@@ -72,7 +71,14 @@ public class MainForm : Form
         _shapeSelector.ValuesChanged += (_, _) => RegeneratePreview();
         _textLinesPanel.LinesChanged += (_, _) => RegeneratePreview();
         _exportButton.Click += (_, _) => ExportStl();
-        _viewportHost.TextLineDragged += (lineIndex, x, y, z) => _textLinesPanel.UpdateLinePosition(lineIndex, x, y, z);
+        _viewportHost.ItemDragged += (kind, index, x, y, z) =>
+        {
+            if (kind == DraggableItemKind.TextLine)
+            {
+                _textLinesPanel.UpdateLinePosition(index, x, y, z);
+            }
+            // SvgInsert case wired once SvgInsertsPanel exists.
+        };
 
         _textLinesPanel.AddLine();
         UpdateTitle();
@@ -223,15 +229,9 @@ public class MainForm : Form
         {
             var (floor, border, textMeshes, svgMeshes) = _orchestrator.GenerateModelParts(model);
 
-            // TEMPORARY interim wiring: floor+border merged into one "base" mesh and SVG meshes
-            // not yet rendered/exported separately — HelixViewportHost.ShowModel's signature and
-            // this whole block get redesigned in Phase 3 (per-item colors, SVG rendering/drag).
-            var baseMesh = new CoreMesh();
-            baseMesh.Append(floor);
-            baseMesh.Append(border);
-
             var merged = new CoreMesh();
-            merged.Append(baseMesh);
+            merged.Append(floor);
+            merged.Append(border);
             foreach (var textMesh in textMeshes)
             {
                 merged.Append(textMesh.Mesh);
@@ -242,11 +242,15 @@ public class MainForm : Form
             }
             _currentMesh = merged;
 
+            var items = textMeshes
+                .Select((t, i) => new DraggableMesh(t.Mesh, t.Line.ColorArgb.ToWpfColor(), DraggableItemKind.TextLine, i))
+                .Concat(svgMeshes.Select((s, i) => new DraggableMesh(s.Mesh, s.Insert.ColorArgb.ToWpfColor(), DraggableItemKind.SvgInsert, i)))
+                .ToList();
+
             _viewportHost.ShowModel(
-                baseMesh,
-                textMeshes.Select(t => t.Mesh).ToList(),
-                Colors.LightSteelBlue,
-                Colors.DarkOrange,
+                new ColoredMesh(floor, model.BaseColorArgb.ToWpfColor()),
+                new ColoredMesh(border, model.BorderColorArgb.ToWpfColor()),
+                items,
                 model.ShapeThickness);
             _statusLabel.Text = $"{_currentMesh.Vertices.Count} vertices, {_currentMesh.Indices.Count / 3} triangles.";
             _statusLabel.ForeColor = System.Drawing.Color.Black;
