@@ -28,34 +28,45 @@ public class ModelOrchestrator : IModelOrchestrator
 
     public Mesh GenerateModel(Model model)
     {
+        var (baseMesh, textMeshes) = GenerateModelParts(model);
+
+        // Each PositionedTextMesh already has its transform baked in, so this is a plain merge.
+        var allMeshes = new List<Mesh> { baseMesh };
+        allMeshes.AddRange(textMeshes.Select(t => t.Mesh));
+        return _meshComposer.MergeMeshes(allMeshes);
+    }
+
+    public (Mesh BaseMesh, IReadOnlyList<PositionedTextMesh> TextMeshes) GenerateModelParts(Model model)
+    {
         var baseMesh = _shapeGenerator.Generate(model);
-        var textMeshes = _textMeshConverter.ConvertMultilineText(model.TextLines);
+        var rawTextMeshes = _textMeshConverter.ConvertMultilineText(model.TextLines);
 
         var autoCenterMeshes = model.TextLines
             .Select((line, index) => (line, index))
             .Where(x => x.line.PositionMode == TextPositionMode.AutoCenter)
-            .Select(x => textMeshes[x.index])
+            .Select(x => rawTextMeshes[x.index])
             .ToList();
 
         var autoCenterTransforms = autoCenterMeshes.Count > 0
             ? _textPositioner.AutoCenter(autoCenterMeshes, model)
             : Array.Empty<Transform>();
 
-        var transforms = new Transform[model.TextLines.Count];
+        var positioned = new PositionedTextMesh[model.TextLines.Count];
         int autoCursor = 0;
         for (int i = 0; i < model.TextLines.Count; i++)
         {
             var line = model.TextLines[i];
-            transforms[i] = line.PositionMode switch
+            var transform = line.PositionMode switch
             {
                 TextPositionMode.AutoCenter => autoCenterTransforms[autoCursor++],
                 TextPositionMode.Manual => _textPositioner.ApplyManualOffset(line),
                 TextPositionMode.Relative => _textPositioner.CalculateRelativeCoords(line, model),
                 _ => throw new ArgumentOutOfRangeException(nameof(model), line.PositionMode, "Unknown text position mode.")
             };
+            positioned[i] = new PositionedTextMesh(line, rawTextMeshes[i].Transformed(transform.Position, transform.RotationZ));
         }
 
-        return _meshComposer.ComposeModel(baseMesh, textMeshes, transforms);
+        return (baseMesh, positioned);
     }
 
     public void ExportSTL(Mesh mesh, string filePath) => STLExporter.ExportToSTL(mesh, filePath);

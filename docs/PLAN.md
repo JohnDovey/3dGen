@@ -31,8 +31,21 @@
   visually even and good enough for a decorative emboss. All four shapes from the original
   spec are now implemented. 28 tests passing total.
 
-Remaining ideas (not currently planned as a phase): richer validation feedback in dialogs,
-drag-and-drop text positioning in the viewport.
+- **Phase 6 (done):** In-app Help viewer (Help → How to Use) rendering `docs/HOW_TO_USE.md` as
+  HTML via Markdig + a WinForms `WebBrowser` control — the .md/images are copied into the build
+  output (`Help\`) so `docs/` stays the single source of truth. Drag-and-drop text positioning
+  in the 3D viewport: each text line now renders as its own pickable `ModelVisual3D` (added
+  `IModelOrchestrator.GenerateModelParts` to get the base shape and positioned text meshes
+  separately instead of pre-merged); dragging a line hit-tests it via `VisualTreeHelper.HitTest`,
+  unprojects the mouse onto the shape's top-surface plane via `Viewport3DHelper.UnProject`, and
+  switches that line to Manual mode with the dropped X/Y/Z. Found and fixed a real, previously-
+  silent WinForms bug in the process: `Dock=Fill` must be added to `Controls` **first** (not
+  last) — controls dock in *reverse* of add order, so a later-added Fill was silently claiming
+  the full client rect and overlapping the Left-docked panel. It never caused a visible glitch
+  (each control's own painting still looked right), but it threw off the viewport's hit-testing
+  coordinates, which is what surfaced it. 29 tests passing total.
+
+Remaining ideas (not currently planned as a phase): richer validation feedback in dialogs.
 
 
 Windows desktop app (Visual Studio / Windows Forms) to generate 3D-printable models:

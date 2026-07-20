@@ -55,17 +55,22 @@ public class MainForm : Form
         leftPanel.Controls.Add(textLinesLabel);
         leftPanel.Controls.Add(_shapeSelector);
 
-        // WinForms docks controls in the order they're added, so Fill must be added last —
-        // otherwise it claims the whole client area before Left/Bottom get their space. MenuStrip
-        // is the only Top-docked control at this level so its position isn't affected by that rule.
+        // WinForms docks controls in reverse of add order — the LAST control added is processed
+        // FIRST and claims its edge before earlier-added siblings get a turn. Fill must therefore
+        // be added FIRST so every other Dock (Top/Left/Bottom) claims its space before Fill takes
+        // whatever's left. Adding Fill last (as an earlier version of this code did) silently
+        // gives it the full client rect, overlapping the other docked controls — the overlap
+        // never caused a visible glitch (their own painting still looked right) but did throw
+        // off the viewport's hit-testing coordinates, which is what surfaced this bug.
+        Controls.Add(_viewportHost);
         Controls.Add(_statusLabel);
         Controls.Add(leftPanel);
-        Controls.Add(_viewportHost);
         Controls.Add(menuStrip);
 
         _shapeSelector.ValuesChanged += (_, _) => RegeneratePreview();
         _textLinesPanel.LinesChanged += (_, _) => RegeneratePreview();
         _exportButton.Click += (_, _) => ExportStl();
+        _viewportHost.TextLineDragged += (lineIndex, x, y, z) => _textLinesPanel.UpdateLinePosition(lineIndex, x, y, z);
 
         _textLinesPanel.AddLine();
         UpdateTitle();
@@ -85,12 +90,28 @@ public class MainForm : Form
         fileMenu.DropDownItems.Add("E&xit", null, (_, _) => Close());
 
         var helpMenu = new ToolStripMenuItem("&Help");
+        helpMenu.DropDownItems.Add("&How to Use", null, (_, _) => ShowHelp());
+        helpMenu.DropDownItems.Add(new ToolStripSeparator());
         helpMenu.DropDownItems.Add("&About", null, (_, _) => ShowAbout());
 
         var menuStrip = new MenuStrip();
         menuStrip.Items.Add(fileMenu);
         menuStrip.Items.Add(helpMenu);
         return menuStrip;
+    }
+
+    private HelpForm? _helpForm;
+
+    private void ShowHelp()
+    {
+        if (_helpForm is { IsDisposed: false })
+        {
+            _helpForm.Activate();
+            return;
+        }
+
+        _helpForm = new HelpForm();
+        _helpForm.Show(this);
     }
 
     private void ShowAbout()
@@ -198,8 +219,22 @@ public class MainForm : Form
 
         try
         {
-            _currentMesh = _orchestrator.GenerateModel(model);
-            _viewportHost.ShowMesh(_currentMesh, Colors.LightSteelBlue);
+            var (baseMesh, textMeshes) = _orchestrator.GenerateModelParts(model);
+
+            var merged = new CoreMesh();
+            merged.Append(baseMesh);
+            foreach (var textMesh in textMeshes)
+            {
+                merged.Append(textMesh.Mesh);
+            }
+            _currentMesh = merged;
+
+            _viewportHost.ShowModel(
+                baseMesh,
+                textMeshes.Select(t => t.Mesh).ToList(),
+                Colors.LightSteelBlue,
+                Colors.DarkOrange,
+                model.ShapeThickness);
             _statusLabel.Text = $"{_currentMesh.Vertices.Count} vertices, {_currentMesh.Indices.Count / 3} triangles.";
             _statusLabel.ForeColor = System.Drawing.Color.Black;
             _exportButton.Enabled = true;

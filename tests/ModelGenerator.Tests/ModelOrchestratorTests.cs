@@ -50,6 +50,35 @@ public class ModelOrchestratorTests
     }
 
     [Fact]
+    public void GenerateModelParts_ReturnsBaseAndOnePositionedMeshPerLine_MatchingGenerateModel()
+    {
+        var model = new Model
+        {
+            ShapeType = ShapeType.Rectangle,
+            ShapeSize = 80,
+            ShapeHeight = 50,
+            TextLines =
+            {
+                new TextLine { LineNumber = 0, Content = "TAG", FontName = "Arial", FontSize = 12, TextHeight = 5, PositionMode = TextPositionMode.AutoCenter },
+                new TextLine { LineNumber = 1, Content = "42", FontName = "Arial", FontSize = 8, TextHeight = 5, PositionMode = TextPositionMode.Relative, PositionX = 20, PositionY = -15 }
+            }
+        };
+
+        var (baseMesh, textMeshes) = _orchestrator.GenerateModelParts(model);
+        var merged = _orchestrator.GenerateModel(model);
+
+        Assert.Equal(2, textMeshes.Count);
+        Assert.Same(model.TextLines[0], textMeshes[0].Line);
+        Assert.Same(model.TextLines[1], textMeshes[1].Line);
+        Assert.NotEmpty(baseMesh.Vertices);
+        Assert.All(textMeshes, t => Assert.NotEmpty(t.Mesh.Vertices));
+
+        // Parts should sum to exactly the same geometry as the merged mesh.
+        int expectedVertexCount = baseMesh.Vertices.Count + textMeshes.Sum(t => t.Mesh.Vertices.Count);
+        Assert.Equal(expectedVertexCount, merged.Vertices.Count);
+    }
+
+    [Fact]
     public void ExportSTL_WritesFileMatchingGeneratedMesh()
     {
         var model = new Model { ShapeType = ShapeType.Circle, ShapeSize = 60 };

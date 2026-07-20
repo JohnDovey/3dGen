@@ -43,6 +43,14 @@ public class TextLinesPanel : UserControl
         LinesChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>Switches the line at lineIndex to Manual mode with the given absolute X/Y/Z (mm)
+    /// — used when the user drags that line's text in the 3D viewport.</summary>
+    public void UpdateLinePosition(int lineIndex, float x, float y, float z)
+    {
+        var row = _rowsPanel.Controls.OfType<TextLineEditorControl>().FirstOrDefault(r => r.LineNumber == lineIndex);
+        row?.SetManualPosition(x, y, z);
+    }
+
     public void Clear()
     {
         foreach (var row in _rowsPanel.Controls.OfType<TextLineEditorControl>().ToList())

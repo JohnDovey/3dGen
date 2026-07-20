@@ -57,6 +57,11 @@ size, and position mode. Click **Remove** on a row to delete it.
 
 ![A circle with "HELLO" embossed and auto-centered](images/02-text-added.png)
 
+**Dragging text in the viewport:** click and drag any line of text directly in
+the 3D preview to reposition it — this switches that line to **Manual** mode
+and fills in its X/Y/Z automatically. The base shape itself isn't draggable
+(dragging it just orbits the camera as usual).
+
 ## 3. Save, open, and start a new model
 
 The **File** menu has:
@@ -80,8 +85,9 @@ Click **Export STL...** (left panel or File menu) and choose where to save the
 `.stl` file. This exports the exact mesh currently shown in the preview, ready
 to open in a slicer (PrusaSlicer, Cura, etc.) and print.
 
-## About / version
+## Help and About
 
-**Help → About** shows the app's version and copyright:
+**Help → How to Use** opens this guide inside the app. **Help → About** shows
+the app's version and copyright:
 
 ![About dialog](images/04-about.png)

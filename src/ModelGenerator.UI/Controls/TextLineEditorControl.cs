@@ -110,6 +110,16 @@ public class TextLineEditorControl : UserControl
         UpdatePositionFieldsState();
     }
 
+    /// <summary>Switches this line to Manual position mode and sets its absolute X/Y/Z (mm) —
+    /// used when the user drags this line's text in the 3D viewport.</summary>
+    public void SetManualPosition(float x, float y, float z)
+    {
+        _positionModeCombo.SelectedIndex = (int)TextPositionMode.Manual;
+        _positionXInput.Value = ClampToRange(_positionXInput, (decimal)x);
+        _positionYInput.Value = ClampToRange(_positionYInput, (decimal)y);
+        _positionZInput.Value = ClampToRange(_positionZInput, (decimal)z);
+    }
+
     private static decimal ClampToRange(NumericUpDown input, decimal value) =>
         Math.Clamp(value, input.Minimum, input.Maximum);
 
