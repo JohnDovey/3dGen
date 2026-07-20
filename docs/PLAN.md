@@ -45,7 +45,34 @@
   (each control's own painting still looked right), but it threw off the viewport's hit-testing
   coordinates, which is what surfaced it. 29 tests passing total.
 
-Remaining ideas (not currently planned as a phase): richer validation feedback in dialogs.
+- **Phase 7 (done):** Fixed a real crash bug found along the way — `Mesh.AddTriangle` normalized
+  a degenerate (zero-area) triangle's cross product unconditionally, producing NaN/Infinity
+  vertex normals that then failed JSON serialization on Save (`Could not save the model: .NET
+  number values such as positive and negative infinity cannot be written as valid JSON`); now
+  guarded by a `LengthSquared() > 1e-12f` check. Added a library of SVG graphics the user can
+  browse (with thumbnails), import from disk, and insert into the model — positioned/adjusted
+  exactly like a text line (scale, emboss height, position mode, drag-to-reposition), built on
+  the `Svg` NuGet package for geometry extraction and the *same* contour → tessellate → extrude
+  pipeline already proven for text glyphs (including holes/cutouts, e.g. a ring shape). Every
+  text line and every SVG insert now has its own color picker (`ColorArgb`, stored as a plain
+  ARGB int to keep Core UI-toolkit-agnostic); the shape's floor and border are independently
+  colorable too (`ShapeGenerator.GenerateParts` splits what used to be one merged mesh).
+  `HelixViewportHost` was redesigned around `ColoredMesh` (floor/border, not draggable) and
+  `DraggableMesh` (text/SVG items, individually pickable and colored) instead of parallel
+  parameter lists. SQLite schema migrated via `PRAGMA table_info` + `ALTER TABLE ADD COLUMN`
+  (new columns on `Models`/`TextLines` plus a new `SvgInserts` table), with a test proving
+  existing data survives the migration. Verified live: the save-bug repro now succeeds; base/
+  border colors and per-item colors all render independently in the viewport; the SVG library
+  dialog renders correct thumbnails for both a solid shape and a shape with a hole. Full
+  interactive click-through (Insert button, drag-in-viewport) hit a UI Automation limitation in
+  this environment — this app's WinForms ListView/Button controls expose as generic panes
+  rather than their real control types, so automated invoke/select calls on them are unreliable
+  — recommend a quick manual pass. 53 tests passing total.
+
+Remaining ideas (not currently planned as a phase): richer validation feedback in dialogs;
+`ShapeType.CustomSvg` (letting a library SVG define the base shape's own outline instead of one
+of the four built-ins) was scoped during the Phase 7 SVG work but deliberately deferred as low
+priority.
 
 
 Windows desktop app (Visual Studio / Windows Forms) to generate 3D-printable models:
