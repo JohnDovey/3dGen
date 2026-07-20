@@ -27,6 +27,9 @@ Under **Shape**, pick one of:
 - **Rectangle** — set both **Size (mm)** (width) and **Height (mm)**
 - **Triangle** — an equilateral triangle; **Size (mm)** sets the side length
 - **Shield** — a heraldic-style silhouette; **Size (mm)** sets the top-edge width
+- **CustomSvg** — the shape's own outline comes from a library SVG instead of a
+  built-in silhouette (see below); **Size (mm)** sets its longer bounding-box
+  dimension
 
 Then set:
 - **Thickness (mm)** — how thick the flat base is
@@ -34,6 +37,19 @@ Then set:
 - **Border height (mm)** — how far that rim is embossed above the base
 
 The 3D preview regenerates automatically every time you change a value.
+
+**Using a custom shape:** pick **CustomSvg** under **Shape**, then click
+**Choose...** next to **Custom shape SVG** to browse the same SVG library used
+for [SVG graphics](#4-inserting-svg-graphics) below and pick a file. The SVG's
+largest contour becomes the shape's outer boundary — the same embossed border,
+thickness, and floor/border colors apply as any other shape:
+
+![A five-pointed star used as the base shape via CustomSvg](images/07-custom-shape-svg.png)
+
+This only works cleanly for a single simple outline; if the SVG has multiple
+separate shapes, the largest one is used and the rest is ignored. Highly
+concave or self-intersecting outlines may not extrude cleanly — stick to a
+single star-like or blob-like silhouette for best results.
 
 ## 2. Add text
 

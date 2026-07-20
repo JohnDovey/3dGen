@@ -1,10 +1,13 @@
 using ModelGenerator.Core.Models;
+using ModelGenerator.Core.Services;
 
 namespace ModelGenerator.UI.Controls;
 
 /// <summary>Lets the user choose the base shape and its dimensions (size, thickness, border).</summary>
 public class ShapeSelectorControl : UserControl
 {
+    private readonly ISvgLibraryService _svgLibrary;
+
     private readonly ComboBox _shapeTypeCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly NumericUpDown _sizeInput = MakeNumeric(60);
     private readonly NumericUpDown _heightInput = MakeNumeric(40);
@@ -13,15 +16,22 @@ public class ShapeSelectorControl : UserControl
     private readonly NumericUpDown _borderHeightInput = MakeNumeric(5);
     private readonly Button _baseColorButton = new() { Text = "Color", Width = 50, AutoSize = false };
     private readonly Button _borderColorButton = new() { Text = "Color", Width = 50, AutoSize = false };
+    private readonly PictureBox _customShapeThumbnail = new() { Width = 32, Height = 32, SizeMode = PictureBoxSizeMode.Zoom, BorderStyle = BorderStyle.FixedSingle };
+    private readonly Button _chooseCustomShapeButton = new() { Text = "Choose...", AutoSize = true };
     private readonly Label _heightLabel;
+    private readonly Label _customShapeLabel;
 
     private int _baseColorArgb = Color.LightSteelBlue.ToArgb();
     private int _borderColorArgb = Color.LightSteelBlue.ToArgb();
+    private string? _customShapeSvgContent;
+    private string? _customShapeSourceFileName;
 
     public event EventHandler? ValuesChanged;
 
-    public ShapeSelectorControl()
+    public ShapeSelectorControl(ISvgLibraryService svgLibrary)
     {
+        _svgLibrary = svgLibrary;
+
         _shapeTypeCombo.Items.AddRange(Enum.GetNames<ShapeType>());
         _shapeTypeCombo.SelectedIndex = 0;
 
@@ -60,13 +70,20 @@ public class ShapeSelectorControl : UserControl
         layout.Controls.Add(new Label { Text = "Border color", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 7);
         layout.Controls.Add(_borderColorButton, 1, 7);
 
+        _customShapeLabel = new Label { Text = "Custom shape SVG", AutoSize = true, Anchor = AnchorStyles.Left };
+        layout.Controls.Add(_customShapeLabel, 0, 8);
+        var customShapeRow = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight };
+        customShapeRow.Controls.Add(_customShapeThumbnail);
+        customShapeRow.Controls.Add(_chooseCustomShapeButton);
+        layout.Controls.Add(customShapeRow, 1, 8);
+
         Controls.Add(layout);
         Dock = DockStyle.Top;
         AutoSize = true;
 
         UpdateColorButtonSwatches();
 
-        _shapeTypeCombo.SelectedIndexChanged += (_, _) => { UpdateHeightFieldState(); RaiseValuesChanged(); };
+        _shapeTypeCombo.SelectedIndexChanged += (_, _) => { UpdateHeightFieldState(); UpdateCustomShapeFieldState(); RaiseValuesChanged(); };
         _sizeInput.ValueChanged += (_, _) => RaiseValuesChanged();
         _heightInput.ValueChanged += (_, _) => RaiseValuesChanged();
         _thicknessInput.ValueChanged += (_, _) => RaiseValuesChanged();
@@ -74,8 +91,10 @@ public class ShapeSelectorControl : UserControl
         _borderHeightInput.ValueChanged += (_, _) => RaiseValuesChanged();
         _baseColorButton.Click += (_, _) => PickColor(isBase: true);
         _borderColorButton.Click += (_, _) => PickColor(isBase: false);
+        _chooseCustomShapeButton.Click += (_, _) => ChooseCustomShape();
 
         UpdateHeightFieldState();
+        UpdateCustomShapeFieldState();
     }
 
     public ShapeType ShapeType => Enum.Parse<ShapeType>((string)_shapeTypeCombo.SelectedItem!);
@@ -95,6 +114,8 @@ public class ShapeSelectorControl : UserControl
         model.BorderHeight = BorderHeight;
         model.BaseColorArgb = _baseColorArgb;
         model.BorderColorArgb = _borderColorArgb;
+        model.CustomShapeSvgContent = _customShapeSvgContent;
+        model.CustomShapeSourceFileName = _customShapeSourceFileName;
     }
 
     /// <summary>Populates the controls from a persisted Model (inverse of ApplyTo).</summary>
@@ -109,7 +130,13 @@ public class ShapeSelectorControl : UserControl
         _baseColorArgb = model.BaseColorArgb;
         _borderColorArgb = model.BorderColorArgb;
         UpdateColorButtonSwatches();
+
+        _customShapeSvgContent = model.CustomShapeSvgContent;
+        _customShapeSourceFileName = model.CustomShapeSourceFileName;
+        UpdateCustomShapeThumbnail();
+
         UpdateHeightFieldState();
+        UpdateCustomShapeFieldState();
     }
 
     private void PickColor(bool isBase)
@@ -136,6 +163,48 @@ public class ShapeSelectorControl : UserControl
     {
         _baseColorButton.BackColor = Color.FromArgb(_baseColorArgb);
         _borderColorButton.BackColor = Color.FromArgb(_borderColorArgb);
+    }
+
+    private void ChooseCustomShape()
+    {
+        using var dialog = new SvgLibraryDialog(_svgLibrary);
+        if (dialog.ShowDialog(FindForm()) != DialogResult.OK || dialog.SelectedSvgContent is null)
+        {
+            return;
+        }
+
+        _customShapeSvgContent = dialog.SelectedSvgContent;
+        _customShapeSourceFileName = dialog.SelectedFileName;
+        UpdateCustomShapeThumbnail();
+        RaiseValuesChanged();
+    }
+
+    private void UpdateCustomShapeThumbnail()
+    {
+        _customShapeThumbnail.Image?.Dispose();
+        if (_customShapeSvgContent is null)
+        {
+            _customShapeThumbnail.Image = null;
+            return;
+        }
+
+        try
+        {
+            _customShapeThumbnail.Image = _svgLibrary.RenderThumbnail(_customShapeSvgContent, 32, 32);
+        }
+        catch (Exception)
+        {
+            // A malformed custom shape SVG must not crash the editor — leave the thumbnail blank;
+            // ShapeGenerator will surface a friendly error via RegeneratePreview's status label.
+            _customShapeThumbnail.Image = null;
+        }
+    }
+
+    private void UpdateCustomShapeFieldState()
+    {
+        bool isCustomSvg = ShapeType == ShapeType.CustomSvg;
+        _customShapeLabel.Enabled = isCustomSvg;
+        _chooseCustomShapeButton.Enabled = isCustomSvg;
     }
 
     private static decimal ClampToRange(NumericUpDown input, decimal value) =>

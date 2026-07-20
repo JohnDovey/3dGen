@@ -9,6 +9,12 @@ public interface IShapeGenerator
     Mesh GenerateShield(float size, float thickness, float borderThickness, float borderHeight);
     Mesh GenerateRectangle(float width, float height, float thickness, float borderThickness, float borderHeight);
 
+    /// <summary>Uses the largest contour in svgContent as the shape's outer boundary (see
+    /// ShapeGenerator.BuildCustomSvgParts for the "largest contour wins" rule and its limits).
+    /// size is the target length of the outline's longer bounding-box dimension, mirroring
+    /// SvgInsert.Scale.</summary>
+    Mesh GenerateCustomSvg(string svgContent, float size, float thickness, float borderThickness, float borderHeight);
+
     /// <summary>Dispatches to the matching Generate* method based on the model's ShapeType.</summary>
     Mesh Generate(Model model);
 

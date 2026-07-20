@@ -12,7 +12,7 @@ public class MainForm : Form
     private readonly IModelRepository _repository;
     private readonly ISvgLibraryService _svgLibrary;
 
-    private readonly ShapeSelectorControl _shapeSelector = new();
+    private readonly ShapeSelectorControl _shapeSelector;
     private readonly TextLinesPanel _textLinesPanel = new();
     private readonly SvgInsertsPanel _svgInsertsPanel;
     private readonly HelixViewportHost _viewportHost = new() { Dock = DockStyle.Fill };
@@ -28,6 +28,7 @@ public class MainForm : Form
         _orchestrator = orchestrator;
         _repository = repository;
         _svgLibrary = svgLibrary;
+        _shapeSelector = new ShapeSelectorControl(svgLibrary);
         _svgInsertsPanel = new SvgInsertsPanel(svgLibrary);
 
         Width = 1200;

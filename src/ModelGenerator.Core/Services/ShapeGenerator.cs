@@ -1,9 +1,14 @@
 using System.Numerics;
+using System.Runtime.Versioning;
 using ModelGenerator.Core.Models;
 using ModelGenerator.Core.Utilities;
 
 namespace ModelGenerator.Core.Services;
 
+/// <summary>Windows-only for v1: the four built-in outlines (Circle/Triangle/Shield/Rectangle)
+/// don't need Windows, but CustomSvg's outline extraction depends on System.Drawing/GDI+ via
+/// SvgContourExtractor, same as TextMeshConverter/SvgMeshConverter.</summary>
+[SupportedOSPlatform("windows")]
 public class ShapeGenerator : IShapeGenerator
 {
     private const int CircleSegments = 64;
@@ -14,6 +19,7 @@ public class ShapeGenerator : IShapeGenerator
         ShapeType.Rectangle => GenerateRectangle(model.ShapeSize, model.ShapeHeight, model.ShapeThickness, model.BorderThickness, model.BorderHeight),
         ShapeType.Triangle => GenerateTriangle(model.ShapeSize, model.ShapeThickness, model.BorderThickness, model.BorderHeight),
         ShapeType.Shield => GenerateShield(model.ShapeSize, model.ShapeThickness, model.BorderThickness, model.BorderHeight),
+        ShapeType.CustomSvg => GenerateCustomSvg(RequireCustomShapeSvg(model), model.ShapeSize, model.ShapeThickness, model.BorderThickness, model.BorderHeight),
         _ => throw new ArgumentOutOfRangeException(nameof(model), model.ShapeType, "Unknown shape type.")
     };
 
@@ -23,8 +29,18 @@ public class ShapeGenerator : IShapeGenerator
         ShapeType.Rectangle => BuildRectangleParts(model.ShapeSize, model.ShapeHeight, model.ShapeThickness, model.BorderThickness, model.BorderHeight),
         ShapeType.Triangle => BuildTriangleParts(model.ShapeSize, model.ShapeThickness, model.BorderThickness, model.BorderHeight),
         ShapeType.Shield => BuildShieldParts(model.ShapeSize, model.ShapeThickness, model.BorderThickness, model.BorderHeight),
+        ShapeType.CustomSvg => BuildCustomSvgParts(RequireCustomShapeSvg(model), model.ShapeSize, model.ShapeThickness, model.BorderThickness, model.BorderHeight),
         _ => throw new ArgumentOutOfRangeException(nameof(model), model.ShapeType, "Unknown shape type.")
     };
+
+    private static string RequireCustomShapeSvg(Model model)
+    {
+        if (string.IsNullOrWhiteSpace(model.CustomShapeSvgContent))
+        {
+            throw new ArgumentException("Choose a custom shape SVG first.");
+        }
+        return model.CustomShapeSvgContent;
+    }
 
     public Mesh GenerateCircle(float diameter, float thickness, float borderThickness, float borderHeight)
     {
@@ -50,6 +66,13 @@ public class ShapeGenerator : IShapeGenerator
     public Mesh GenerateShield(float size, float thickness, float borderThickness, float borderHeight)
     {
         var (floor, border) = BuildShieldParts(size, thickness, borderThickness, borderHeight);
+        floor.Append(border);
+        return floor;
+    }
+
+    public Mesh GenerateCustomSvg(string svgContent, float size, float thickness, float borderThickness, float borderHeight)
+    {
+        var (floor, border) = BuildCustomSvgParts(svgContent, size, thickness, borderThickness, borderHeight);
         floor.Append(border);
         return floor;
     }
@@ -124,6 +147,43 @@ public class ShapeGenerator : IShapeGenerator
         var floor = MeshMath.ExtrudeSolid(outer, 0, thickness);
         var border = MeshMath.ExtrudeRing(outer, inner, thickness, thickness + borderHeight);
         return (floor, border);
+    }
+
+    private static (Mesh Floor, Mesh Border) BuildCustomSvgParts(string svgContent, float size, float thickness, float borderThickness, float borderHeight)
+    {
+        var outer = ExtractCustomOutline(svgContent, size);
+        var inner = RadialInset(outer, borderThickness, "custom shape");
+
+        var floor = MeshMath.ExtrudeSolid(outer, 0, thickness);
+        var border = MeshMath.ExtrudeRing(outer, inner, thickness, thickness + borderHeight);
+        return (floor, border);
+    }
+
+    /// <summary>Picks the SVG's largest-area contour as the shape's outer boundary, normalizes its
+    /// winding to CCW (matching the other built-in shapes), and fits/centers it so its longer
+    /// bounding-box dimension equals size and its bounding-box center sits at the origin. Only
+    /// works cleanly for a single simple closed path — for a multi-path SVG, "largest contour
+    /// wins" and the rest is silently ignored.</summary>
+    private static List<Vector2> ExtractCustomOutline(string svgContent, float size)
+    {
+        var contours = SvgContourExtractor.ExtractContours(svgContent);
+        if (contours.Count == 0)
+        {
+            throw new ArgumentException("The custom shape SVG has no visible geometry.");
+        }
+
+        var outer = contours.OrderByDescending(c => MathF.Abs(MeshMath.SignedArea(c))).First();
+        if (MeshMath.SignedArea(outer) < 0)
+        {
+            outer.Reverse();
+        }
+
+        var (min, max) = MeshMath.BoundingBox(outer);
+        var center = (min + max) / 2f;
+        float maxDimension = MathF.Max(max.X - min.X, max.Y - min.Y);
+        float scale = maxDimension > 0 ? size / maxDimension : 1f;
+
+        return outer.Select(p => (p - center) * scale).ToList();
     }
 
     private static List<Vector2> CircleOutline(float radius)

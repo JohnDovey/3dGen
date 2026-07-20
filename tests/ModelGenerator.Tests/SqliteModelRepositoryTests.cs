@@ -107,6 +107,45 @@ public class SqliteModelRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveAndRetrieveModel_RoundTripsCustomShapeSvg()
+    {
+        const string svg = """
+            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10">
+                <rect x="0" y="0" width="10" height="10" />
+            </svg>
+            """;
+        var model = new Model
+        {
+            Name = "Custom Shape Model",
+            ShapeType = ShapeType.CustomSvg,
+            ShapeSize = 60,
+            CustomShapeSvgContent = svg,
+            CustomShapeSourceFileName = "outline.svg"
+        };
+
+        int id = await _repository.SaveModelAsync(model);
+        var loaded = await _repository.GetModelByIdAsync(id);
+
+        Assert.NotNull(loaded);
+        Assert.Equal(ShapeType.CustomSvg, loaded!.ShapeType);
+        Assert.Equal(svg, loaded.CustomShapeSvgContent);
+        Assert.Equal("outline.svg", loaded.CustomShapeSourceFileName);
+    }
+
+    [Fact]
+    public async Task SaveAndRetrieveModel_WithoutCustomShapeSvg_RoundTripsAsNull()
+    {
+        var model = new Model { Name = "Plain Circle", ShapeType = ShapeType.Circle, ShapeSize = 60 };
+
+        int id = await _repository.SaveModelAsync(model);
+        var loaded = await _repository.GetModelByIdAsync(id);
+
+        Assert.NotNull(loaded);
+        Assert.Null(loaded!.CustomShapeSvgContent);
+        Assert.Null(loaded.CustomShapeSourceFileName);
+    }
+
+    [Fact]
     public async Task SaveModelAsync_OnUpdate_ReplacesSvgInsertsLikeTextLines()
     {
         const string svg = """<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" /></svg>""";

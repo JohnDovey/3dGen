@@ -21,6 +21,15 @@ public class Model
     public int BaseColorArgb { get; set; } = Color.LightSteelBlue.ToArgb();
     public int BorderColorArgb { get; set; } = Color.LightSteelBlue.ToArgb();
 
+    /// <summary>Full SVG XML content defining the shape's outline, used only when ShapeType is
+    /// CustomSvg — self-contained like SvgInsert.SvgContent, so the model stays valid even if the
+    /// library file is later renamed or deleted.</summary>
+    public string? CustomShapeSvgContent { get; set; }
+
+    /// <summary>Library filename at selection time — display/reference only, not used for
+    /// geometry.</summary>
+    public string? CustomShapeSourceFileName { get; set; }
+
     public List<TextLine> TextLines { get; set; } = new();
     public List<SvgInsert> SvgInserts { get; set; } = new();
 

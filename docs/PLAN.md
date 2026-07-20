@@ -69,10 +69,23 @@
   rather than their real control types, so automated invoke/select calls on them are unreliable
   — recommend a quick manual pass. 53 tests passing total.
 
-Remaining ideas (not currently planned as a phase): richer validation feedback in dialogs;
-`ShapeType.CustomSvg` (letting a library SVG define the base shape's own outline instead of one
-of the four built-ins) was scoped during the Phase 7 SVG work but deliberately deferred as low
-priority.
+- **Phase 8 (done):** Implemented the previously-deferred `ShapeType.CustomSvg` — a library SVG
+  can now define the base shape's own outline instead of one of the four built-ins.
+  `ShapeGenerator.BuildCustomSvgParts` picks the SVG's largest-area contour as the outer
+  boundary (via the shared `SvgContourExtractor`, refactored out of `SvgMeshConverter` so both
+  share one SVG-tree-walking implementation), normalizes its winding to CCW, and fits/centers it
+  so its longer bounding-box dimension equals `Model.ShapeSize` — then reuses the existing
+  `RadialInset`/`ExtrudeSolid`/`ExtrudeRing` pipeline exactly like the Shield shape. Only cleanly
+  supports a single simple closed path — a multi-path SVG uses "largest contour wins" — same
+  documented limitation as Shield's border approximation. `ShapeSelectorControl` gained a
+  "Custom shape SVG" thumbnail + **Choose...** button (reuses `SvgLibraryDialog`), enabled only
+  when `CustomSvg` is selected. Verified live end-to-end: picked a 5-pointed star from the
+  library, watched it become the model's actual base shape (embossed border correctly inset,
+  floor/border colors applied, 360 vertices / 120 triangles), saved it, and confirmed via the
+  Open dialog that `ShapeType.CustomSvg` and the SVG content round-trip through SQLite correctly
+  (also covered by a repository unit test). 60 tests passing total.
+
+Remaining ideas (not currently planned as a phase): richer validation feedback in dialogs.
 
 
 Windows desktop app (Visual Studio / Windows Forms) to generate 3D-printable models:

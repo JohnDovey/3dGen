@@ -21,6 +21,8 @@ public class DatabaseInitializerTests : IDisposable
 
         Assert.True(ColumnExists("Models", "BaseColorArgb"));
         Assert.True(ColumnExists("Models", "BorderColorArgb"));
+        Assert.True(ColumnExists("Models", "CustomShapeSvgContent"));
+        Assert.True(ColumnExists("Models", "CustomShapeSourceFileName"));
         Assert.True(ColumnExists("TextLines", "ColorArgb"));
         Assert.True(TableExists("SvgInserts"));
     }
@@ -80,6 +82,8 @@ public class DatabaseInitializerTests : IDisposable
 
         Assert.True(ColumnExists("Models", "BaseColorArgb"));
         Assert.True(ColumnExists("Models", "BorderColorArgb"));
+        Assert.True(ColumnExists("Models", "CustomShapeSvgContent"));
+        Assert.True(ColumnExists("Models", "CustomShapeSourceFileName"));
         Assert.True(ColumnExists("TextLines", "ColorArgb"));
         Assert.True(TableExists("SvgInserts"));
 

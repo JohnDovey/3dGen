@@ -1,20 +1,26 @@
 # 3D Model Generator
 
 A Windows desktop app for designing simple 3D-printable models: pick a base shape,
-add embossed custom text, preview it in 3D, and export straight to STL.
+add embossed custom text and SVG graphics, preview it in 3D, and export straight
+to STL.
 
-Choose a shape — circle, rectangle, triangle, or shield — with a raised border,
-then add one or more lines of embossed text with per-line font, size, and
+Choose a shape — circle, rectangle, triangle, shield, or your own custom SVG
+outline — with an independently-colored raised border, then add any number of
+embossed text lines and SVG graphics (browsed from a built-in library with
+thumbnail previews), each with its own font/scale, emboss height, color, and
 placement (auto-centered, manually positioned, or positioned relative to the
-shape). Preview the composed model live in a 3D viewport, save/load designs to a
+shape). Preview the composed model live in a 3D viewport — drag any text line or
+SVG insert directly in the viewport to reposition it — save/load designs to a
 local SQLite database, and export the final mesh as a binary STL file ready to
 slice and print.
 
 ## Status
 
 Actively developed. Core geometry/STL export, text embossing, the WinForms UI,
-save/load, the full shape set, an in-app Help viewer, and drag-and-drop text
-positioning are all done. See [`docs/PLAN.md`](docs/PLAN.md) for the full
+save/load, the full shape set (including custom SVG outlines), an in-app Help
+viewer, drag-and-drop positioning, an SVG graphics library with per-item inserts,
+and independent colors for the shape's floor/border and every text line/SVG
+insert are all done. See [`docs/PLAN.md`](docs/PLAN.md) for the full
 architecture write-up and phase-by-phase status, and
 [`docs/HOW_TO_USE.md`](docs/HOW_TO_USE.md) for a walkthrough of using the app
 (also available in-app via Help → How to Use).
@@ -56,12 +62,13 @@ to target a different platform (e.g. `win-arm64`).
 
 ```
 src/
-  ModelGenerator.Core   Shape generation, text-to-mesh conversion, positioning,
-                         mesh composition, and STL export — no UI or DB dependency.
+  ModelGenerator.Core   Shape generation (including custom SVG outlines),
+                         text- and SVG-to-mesh conversion, positioning, mesh
+                         composition, and STL export — no UI or DB dependency.
   ModelGenerator.Data   SQLite persistence (models + cached mesh geometry).
-  ModelGenerator.UI     Windows Forms app: shape/text editors, a Helix Toolkit 3D
-                         viewport (hosted via WPF interop), and New/Open/Save/
-                         Export STL menus.
+  ModelGenerator.UI     Windows Forms app: shape/text/SVG-insert editors, an SVG
+                         library browser, a Helix Toolkit 3D viewport (hosted via
+                         WPF interop), and New/Open/Save/Export STL menus.
 tests/
   ModelGenerator.Tests  Unit tests for Core and Data.
 ```
@@ -76,7 +83,10 @@ touching the geometry or persistence logic.
 - Windows Forms (UI) + WPF interop for the 3D viewport
 - [Helix Toolkit](https://github.com/helix-toolkit/helix-toolkit) for 3D rendering
 - [LibTessDotNet](https://github.com/speps/LibTessDotNet) for tessellating glyph
-  outlines (including holes, e.g. the counter of a letter "O")
+  and SVG outlines (including holes, e.g. the counter of a letter "O" or an SVG
+  cutout)
+- [Svg](https://github.com/svg-net/SVG) for parsing SVG graphics and extracting
+  their outlines
 - SQLite via `Microsoft.Data.Sqlite`
 - xUnit for tests
 

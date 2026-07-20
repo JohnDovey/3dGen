@@ -35,6 +35,8 @@ public class DatabaseInitializer
                     BorderHeight REAL NOT NULL DEFAULT 5,
                     BaseColorArgb INTEGER NOT NULL DEFAULT {LightSteelBlueArgb},
                     BorderColorArgb INTEGER NOT NULL DEFAULT {LightSteelBlueArgb},
+                    CustomShapeSvgContent TEXT,
+                    CustomShapeSourceFileName TEXT,
                     CreatedDate TEXT NOT NULL DEFAULT (datetime('now')),
                     ModifiedDate TEXT NOT NULL DEFAULT (datetime('now'))
                 );
@@ -93,6 +95,8 @@ public class DatabaseInitializer
         AddColumnIfMissing(connection, "Models", "BaseColorArgb", $"INTEGER NOT NULL DEFAULT {LightSteelBlueArgb}");
         AddColumnIfMissing(connection, "Models", "BorderColorArgb", $"INTEGER NOT NULL DEFAULT {LightSteelBlueArgb}");
         AddColumnIfMissing(connection, "TextLines", "ColorArgb", $"INTEGER NOT NULL DEFAULT {DarkOrangeArgb}");
+        AddColumnIfMissing(connection, "Models", "CustomShapeSvgContent", "TEXT");
+        AddColumnIfMissing(connection, "Models", "CustomShapeSourceFileName", "TEXT");
     }
 
     private static void AddColumnIfMissing(SqliteConnection connection, string table, string column, string columnDefinition)

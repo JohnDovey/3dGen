@@ -79,8 +79,8 @@ public class SqliteModelRepository : IModelRepository
             using var insert = connection.CreateCommand();
             insert.Transaction = transaction;
             insert.CommandText = """
-                INSERT INTO Models (Name, ShapeType, ShapeSize, ShapeHeight, ShapeThickness, BorderThickness, BorderHeight, BaseColorArgb, BorderColorArgb, ModifiedDate)
-                VALUES (@name, @shapeType, @shapeSize, @shapeHeight, @shapeThickness, @borderThickness, @borderHeight, @baseColorArgb, @borderColorArgb, datetime('now'));
+                INSERT INTO Models (Name, ShapeType, ShapeSize, ShapeHeight, ShapeThickness, BorderThickness, BorderHeight, BaseColorArgb, BorderColorArgb, CustomShapeSvgContent, CustomShapeSourceFileName, ModifiedDate)
+                VALUES (@name, @shapeType, @shapeSize, @shapeHeight, @shapeThickness, @borderThickness, @borderHeight, @baseColorArgb, @borderColorArgb, @customShapeSvgContent, @customShapeSourceFileName, datetime('now'));
                 SELECT last_insert_rowid();
                 """;
             AddModelParameters(insert, model);
@@ -101,6 +101,8 @@ public class SqliteModelRepository : IModelRepository
                     BorderHeight = @borderHeight,
                     BaseColorArgb = @baseColorArgb,
                     BorderColorArgb = @borderColorArgb,
+                    CustomShapeSvgContent = @customShapeSvgContent,
+                    CustomShapeSourceFileName = @customShapeSourceFileName,
                     ModifiedDate = datetime('now')
                 WHERE ModelId = @id;
                 """;
@@ -233,6 +235,8 @@ public class SqliteModelRepository : IModelRepository
         command.Parameters.AddWithValue("@borderHeight", model.BorderHeight);
         command.Parameters.AddWithValue("@baseColorArgb", model.BaseColorArgb);
         command.Parameters.AddWithValue("@borderColorArgb", model.BorderColorArgb);
+        command.Parameters.AddWithValue("@customShapeSvgContent", (object?)model.CustomShapeSvgContent ?? DBNull.Value);
+        command.Parameters.AddWithValue("@customShapeSourceFileName", (object?)model.CustomShapeSourceFileName ?? DBNull.Value);
     }
 
     private static Model ReadModel(SqliteDataReader reader) => new()
@@ -247,6 +251,8 @@ public class SqliteModelRepository : IModelRepository
         BorderHeight = (float)reader.GetDouble(reader.GetOrdinal("BorderHeight")),
         BaseColorArgb = GetInt32OrDefault(reader, "BaseColorArgb", LightSteelBlueArgb),
         BorderColorArgb = GetInt32OrDefault(reader, "BorderColorArgb", LightSteelBlueArgb),
+        CustomShapeSvgContent = GetStringOrNull(reader, "CustomShapeSvgContent"),
+        CustomShapeSourceFileName = GetStringOrNull(reader, "CustomShapeSourceFileName"),
         CreatedDate = reader.GetDateTime(reader.GetOrdinal("CreatedDate")),
         ModifiedDate = reader.GetDateTime(reader.GetOrdinal("ModifiedDate"))
     };
@@ -315,5 +321,11 @@ public class SqliteModelRepository : IModelRepository
     {
         int ordinal = reader.GetOrdinal(column);
         return reader.IsDBNull(ordinal) ? defaultValue : reader.GetInt32(ordinal);
+    }
+
+    private static string? GetStringOrNull(SqliteDataReader reader, string column)
+    {
+        int ordinal = reader.GetOrdinal(column);
+        return reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);
     }
 }
