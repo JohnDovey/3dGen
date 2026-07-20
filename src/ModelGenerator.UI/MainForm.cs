@@ -11,6 +11,7 @@ public class MainForm : Form
 {
     private readonly IModelOrchestrator _orchestrator;
     private readonly IModelRepository _repository;
+    private readonly ISvgLibraryService _svgLibrary;
 
     private readonly ShapeSelectorControl _shapeSelector = new();
     private readonly TextLinesPanel _textLinesPanel = new();
@@ -22,10 +23,11 @@ public class MainForm : Form
     private int? _currentModelId;
     private string _currentModelName = "Untitled";
 
-    public MainForm(IModelOrchestrator orchestrator, IModelRepository repository)
+    public MainForm(IModelOrchestrator orchestrator, IModelRepository repository, ISvgLibraryService svgLibrary)
     {
         _orchestrator = orchestrator;
         _repository = repository;
+        _svgLibrary = svgLibrary;
 
         Width = 1200;
         Height = 800;

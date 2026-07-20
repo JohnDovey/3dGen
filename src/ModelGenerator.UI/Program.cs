@@ -30,10 +30,14 @@ static class Program
         Directory.CreateDirectory(appDataDir);
         string dbPath = Path.Combine(appDataDir, "models.sqlite");
 
+        string svgLibraryDir = Path.Combine(appDataDir, "SvgLibrary");
+        Directory.CreateDirectory(svgLibraryDir);
+        var svgLibraryService = new SvgLibraryService(svgLibraryDir);
+
         var connectionFactory = new ConnectionFactory(dbPath);
         new DatabaseInitializer(connectionFactory).Initialize();
         var repository = new SqliteModelRepository(connectionFactory);
 
-        Application.Run(new MainForm(orchestrator, repository));
+        Application.Run(new MainForm(orchestrator, repository, svgLibraryService));
     }
 }

@@ -47,6 +47,90 @@ public class SqliteModelRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveAndRetrieveModel_RoundTripsColorsAndSvgInserts()
+    {
+        const string svg = """
+            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10">
+                <rect x="0" y="0" width="10" height="10" />
+            </svg>
+            """;
+        var model = new Model
+        {
+            Name = "Colorful Model",
+            ShapeType = ShapeType.Circle,
+            ShapeSize = 60,
+            BaseColorArgb = System.Drawing.Color.Crimson.ToArgb(),
+            BorderColorArgb = System.Drawing.Color.Gold.ToArgb(),
+            TextLines =
+            {
+                new TextLine { LineNumber = 0, Content = "HI", ColorArgb = System.Drawing.Color.Blue.ToArgb() }
+            },
+            SvgInserts =
+            {
+                new SvgInsert
+                {
+                    LineNumber = 0,
+                    SourceFileName = "logo.svg",
+                    SvgContent = svg,
+                    Scale = 25,
+                    EmbossHeight = 6,
+                    PositionMode = TextPositionMode.Manual,
+                    PositionX = 10,
+                    PositionY = 20,
+                    PositionZ = 5,
+                    RotationZ = 45,
+                    ColorArgb = System.Drawing.Color.Green.ToArgb()
+                }
+            }
+        };
+
+        int id = await _repository.SaveModelAsync(model);
+        var loaded = await _repository.GetModelByIdAsync(id);
+
+        Assert.NotNull(loaded);
+        Assert.Equal(System.Drawing.Color.Crimson.ToArgb(), loaded!.BaseColorArgb);
+        Assert.Equal(System.Drawing.Color.Gold.ToArgb(), loaded.BorderColorArgb);
+        Assert.Equal(System.Drawing.Color.Blue.ToArgb(), loaded.TextLines[0].ColorArgb);
+
+        Assert.Single(loaded.SvgInserts);
+        var svgInsert = loaded.SvgInserts[0];
+        Assert.Equal("logo.svg", svgInsert.SourceFileName);
+        Assert.Equal(svg, svgInsert.SvgContent);
+        Assert.Equal(25, svgInsert.Scale);
+        Assert.Equal(6, svgInsert.EmbossHeight);
+        Assert.Equal(TextPositionMode.Manual, svgInsert.PositionMode);
+        Assert.Equal(10, svgInsert.PositionX);
+        Assert.Equal(20, svgInsert.PositionY);
+        Assert.Equal(5, svgInsert.PositionZ);
+        Assert.Equal(45, svgInsert.RotationZ);
+        Assert.Equal(System.Drawing.Color.Green.ToArgb(), svgInsert.ColorArgb);
+    }
+
+    [Fact]
+    public async Task SaveModelAsync_OnUpdate_ReplacesSvgInsertsLikeTextLines()
+    {
+        const string svg = """<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" /></svg>""";
+        var model = new Model
+        {
+            Name = "Updatable",
+            ShapeType = ShapeType.Circle,
+            ShapeSize = 60,
+            SvgInserts = { new SvgInsert { LineNumber = 0, SvgContent = svg } }
+        };
+        int id = await _repository.SaveModelAsync(model);
+
+        model.SvgInserts.Clear();
+        model.SvgInserts.Add(new SvgInsert { LineNumber = 0, SvgContent = svg, Scale = 99 });
+        await _repository.SaveModelAsync(model);
+
+        var loaded = await _repository.GetModelByIdAsync(id);
+
+        Assert.NotNull(loaded);
+        Assert.Single(loaded!.SvgInserts);
+        Assert.Equal(99, loaded.SvgInserts[0].Scale);
+    }
+
+    [Fact]
     public async Task SaveAndRetrieveMesh_RoundTripsGeometry()
     {
         var model = new Model { Name = "Mesh Round Trip", ShapeType = ShapeType.Circle, ShapeSize = 60 };

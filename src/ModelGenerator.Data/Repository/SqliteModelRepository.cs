@@ -6,6 +6,11 @@ namespace ModelGenerator.Data.Repository;
 
 public class SqliteModelRepository : IModelRepository
 {
+    // Fallback defaults if a column is unexpectedly NULL — matches DatabaseInitializer's SQL
+    // DEFAULT values (System.Drawing.Color.LightSteelBlue/.DarkOrange.ToArgb()).
+    private const int LightSteelBlueArgb = -5192482;
+    private const int DarkOrangeArgb = -29696;
+
     private readonly ConnectionFactory _connectionFactory;
 
     public SqliteModelRepository(ConnectionFactory connectionFactory)
@@ -36,6 +41,7 @@ public class SqliteModelRepository : IModelRepository
         }
 
         model.TextLines = await LoadTextLinesAsync(connection, modelId);
+        model.SvgInserts = await LoadSvgInsertsAsync(connection, modelId);
         return model;
     }
 
@@ -57,6 +63,7 @@ public class SqliteModelRepository : IModelRepository
         foreach (var model in models)
         {
             model.TextLines = await LoadTextLinesAsync(connection, model.Id);
+            model.SvgInserts = await LoadSvgInsertsAsync(connection, model.Id);
         }
 
         return models;
@@ -72,8 +79,8 @@ public class SqliteModelRepository : IModelRepository
             using var insert = connection.CreateCommand();
             insert.Transaction = transaction;
             insert.CommandText = """
-                INSERT INTO Models (Name, ShapeType, ShapeSize, ShapeHeight, ShapeThickness, BorderThickness, BorderHeight, ModifiedDate)
-                VALUES (@name, @shapeType, @shapeSize, @shapeHeight, @shapeThickness, @borderThickness, @borderHeight, datetime('now'));
+                INSERT INTO Models (Name, ShapeType, ShapeSize, ShapeHeight, ShapeThickness, BorderThickness, BorderHeight, BaseColorArgb, BorderColorArgb, ModifiedDate)
+                VALUES (@name, @shapeType, @shapeSize, @shapeHeight, @shapeThickness, @borderThickness, @borderHeight, @baseColorArgb, @borderColorArgb, datetime('now'));
                 SELECT last_insert_rowid();
                 """;
             AddModelParameters(insert, model);
@@ -92,6 +99,8 @@ public class SqliteModelRepository : IModelRepository
                     ShapeThickness = @shapeThickness,
                     BorderThickness = @borderThickness,
                     BorderHeight = @borderHeight,
+                    BaseColorArgb = @baseColorArgb,
+                    BorderColorArgb = @borderColorArgb,
                     ModifiedDate = datetime('now')
                 WHERE ModelId = @id;
                 """;
@@ -104,6 +113,12 @@ public class SqliteModelRepository : IModelRepository
             deleteTextLines.CommandText = "DELETE FROM TextLines WHERE ModelId = @id;";
             deleteTextLines.Parameters.AddWithValue("@id", model.Id);
             await deleteTextLines.ExecuteNonQueryAsync();
+
+            using var deleteSvgInserts = connection.CreateCommand();
+            deleteSvgInserts.Transaction = transaction;
+            deleteSvgInserts.CommandText = "DELETE FROM SvgInserts WHERE ModelId = @id;";
+            deleteSvgInserts.Parameters.AddWithValue("@id", model.Id);
+            await deleteSvgInserts.ExecuteNonQueryAsync();
         }
 
         foreach (var textLine in model.TextLines)
@@ -112,9 +127,9 @@ public class SqliteModelRepository : IModelRepository
             insertLine.Transaction = transaction;
             insertLine.CommandText = """
                 INSERT INTO TextLines
-                    (ModelId, LineNumber, Content, FontName, FontSize, TextHeight, PositionMode, PositionX, PositionY, PositionZ, RotationZ)
+                    (ModelId, LineNumber, Content, FontName, FontSize, TextHeight, PositionMode, PositionX, PositionY, PositionZ, RotationZ, ColorArgb)
                 VALUES
-                    (@modelId, @lineNumber, @content, @fontName, @fontSize, @textHeight, @positionMode, @positionX, @positionY, @positionZ, @rotationZ);
+                    (@modelId, @lineNumber, @content, @fontName, @fontSize, @textHeight, @positionMode, @positionX, @positionY, @positionZ, @rotationZ, @colorArgb);
                 """;
             insertLine.Parameters.AddWithValue("@modelId", model.Id);
             insertLine.Parameters.AddWithValue("@lineNumber", textLine.LineNumber);
@@ -127,7 +142,33 @@ public class SqliteModelRepository : IModelRepository
             insertLine.Parameters.AddWithValue("@positionY", textLine.PositionY);
             insertLine.Parameters.AddWithValue("@positionZ", textLine.PositionZ);
             insertLine.Parameters.AddWithValue("@rotationZ", textLine.RotationZ);
+            insertLine.Parameters.AddWithValue("@colorArgb", textLine.ColorArgb);
             await insertLine.ExecuteNonQueryAsync();
+        }
+
+        foreach (var svgInsert in model.SvgInserts)
+        {
+            using var insertSvg = connection.CreateCommand();
+            insertSvg.Transaction = transaction;
+            insertSvg.CommandText = """
+                INSERT INTO SvgInserts
+                    (ModelId, LineNumber, SourceFileName, SvgContent, Scale, EmbossHeight, PositionMode, PositionX, PositionY, PositionZ, RotationZ, ColorArgb)
+                VALUES
+                    (@modelId, @lineNumber, @sourceFileName, @svgContent, @scale, @embossHeight, @positionMode, @positionX, @positionY, @positionZ, @rotationZ, @colorArgb);
+                """;
+            insertSvg.Parameters.AddWithValue("@modelId", model.Id);
+            insertSvg.Parameters.AddWithValue("@lineNumber", svgInsert.LineNumber);
+            insertSvg.Parameters.AddWithValue("@sourceFileName", (object?)svgInsert.SourceFileName ?? DBNull.Value);
+            insertSvg.Parameters.AddWithValue("@svgContent", svgInsert.SvgContent);
+            insertSvg.Parameters.AddWithValue("@scale", svgInsert.Scale);
+            insertSvg.Parameters.AddWithValue("@embossHeight", svgInsert.EmbossHeight);
+            insertSvg.Parameters.AddWithValue("@positionMode", (int)svgInsert.PositionMode);
+            insertSvg.Parameters.AddWithValue("@positionX", svgInsert.PositionX);
+            insertSvg.Parameters.AddWithValue("@positionY", svgInsert.PositionY);
+            insertSvg.Parameters.AddWithValue("@positionZ", svgInsert.PositionZ);
+            insertSvg.Parameters.AddWithValue("@rotationZ", svgInsert.RotationZ);
+            insertSvg.Parameters.AddWithValue("@colorArgb", svgInsert.ColorArgb);
+            await insertSvg.ExecuteNonQueryAsync();
         }
 
         transaction.Commit();
@@ -190,6 +231,8 @@ public class SqliteModelRepository : IModelRepository
         command.Parameters.AddWithValue("@shapeThickness", model.ShapeThickness);
         command.Parameters.AddWithValue("@borderThickness", model.BorderThickness);
         command.Parameters.AddWithValue("@borderHeight", model.BorderHeight);
+        command.Parameters.AddWithValue("@baseColorArgb", model.BaseColorArgb);
+        command.Parameters.AddWithValue("@borderColorArgb", model.BorderColorArgb);
     }
 
     private static Model ReadModel(SqliteDataReader reader) => new()
@@ -202,6 +245,8 @@ public class SqliteModelRepository : IModelRepository
         ShapeThickness = (float)reader.GetDouble(reader.GetOrdinal("ShapeThickness")),
         BorderThickness = (float)reader.GetDouble(reader.GetOrdinal("BorderThickness")),
         BorderHeight = (float)reader.GetDouble(reader.GetOrdinal("BorderHeight")),
+        BaseColorArgb = GetInt32OrDefault(reader, "BaseColorArgb", LightSteelBlueArgb),
+        BorderColorArgb = GetInt32OrDefault(reader, "BorderColorArgb", LightSteelBlueArgb),
         CreatedDate = reader.GetDateTime(reader.GetOrdinal("CreatedDate")),
         ModifiedDate = reader.GetDateTime(reader.GetOrdinal("ModifiedDate"))
     };
@@ -228,9 +273,47 @@ public class SqliteModelRepository : IModelRepository
                 PositionX = reader.IsDBNull(reader.GetOrdinal("PositionX")) ? 0 : (float)reader.GetDouble(reader.GetOrdinal("PositionX")),
                 PositionY = reader.IsDBNull(reader.GetOrdinal("PositionY")) ? 0 : (float)reader.GetDouble(reader.GetOrdinal("PositionY")),
                 PositionZ = reader.IsDBNull(reader.GetOrdinal("PositionZ")) ? 0 : (float)reader.GetDouble(reader.GetOrdinal("PositionZ")),
-                RotationZ = (float)reader.GetDouble(reader.GetOrdinal("RotationZ"))
+                RotationZ = (float)reader.GetDouble(reader.GetOrdinal("RotationZ")),
+                ColorArgb = GetInt32OrDefault(reader, "ColorArgb", DarkOrangeArgb)
             });
         }
         return lines;
+    }
+
+    private static async Task<List<SvgInsert>> LoadSvgInsertsAsync(SqliteConnection connection, int modelId)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT * FROM SvgInserts WHERE ModelId = @id ORDER BY LineNumber;";
+        command.Parameters.AddWithValue("@id", modelId);
+
+        var inserts = new List<SvgInsert>();
+        using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            inserts.Add(new SvgInsert
+            {
+                Id = reader.GetInt32(reader.GetOrdinal("SvgInsertId")),
+                LineNumber = reader.GetInt32(reader.GetOrdinal("LineNumber")),
+                SourceFileName = reader.IsDBNull(reader.GetOrdinal("SourceFileName")) ? null : reader.GetString(reader.GetOrdinal("SourceFileName")),
+                SvgContent = reader.GetString(reader.GetOrdinal("SvgContent")),
+                Scale = (float)reader.GetDouble(reader.GetOrdinal("Scale")),
+                EmbossHeight = (float)reader.GetDouble(reader.GetOrdinal("EmbossHeight")),
+                PositionMode = (TextPositionMode)reader.GetInt32(reader.GetOrdinal("PositionMode")),
+                PositionX = reader.IsDBNull(reader.GetOrdinal("PositionX")) ? 0 : (float)reader.GetDouble(reader.GetOrdinal("PositionX")),
+                PositionY = reader.IsDBNull(reader.GetOrdinal("PositionY")) ? 0 : (float)reader.GetDouble(reader.GetOrdinal("PositionY")),
+                PositionZ = reader.IsDBNull(reader.GetOrdinal("PositionZ")) ? 0 : (float)reader.GetDouble(reader.GetOrdinal("PositionZ")),
+                RotationZ = (float)reader.GetDouble(reader.GetOrdinal("RotationZ")),
+                ColorArgb = GetInt32OrDefault(reader, "ColorArgb", DarkOrangeArgb)
+            });
+        }
+        return inserts;
+    }
+
+    /// <summary>Defensive fallback for a NULL color column — the DB migration backfills existing
+    /// rows via ALTER TABLE ... DEFAULT, so this should only matter for hand-edited databases.</summary>
+    private static int GetInt32OrDefault(SqliteDataReader reader, string column, int defaultValue)
+    {
+        int ordinal = reader.GetOrdinal(column);
+        return reader.IsDBNull(ordinal) ? defaultValue : reader.GetInt32(ordinal);
     }
 }
