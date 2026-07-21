@@ -31,10 +31,24 @@ walkthrough of using the app (also available in-app via Help → How to Use).
 
 ## Requirements
 
+### Windows app
 - Windows
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - Visual Studio 2022 (17.13+) if you want to open `ModelGenerator.slnx`, or just the
   `dotnet` CLI
+
+### Mac app (Phase 2 preview)
+- macOS 14+
+- Xcode 16 / Swift 6
+- .NET 10 SDK on `PATH` (the Swift app launches `ModelGenerator.Host` via `dotnet run` in development)
+
+```bash
+cd mac/ModelGeneratorMac
+swift run
+```
+
+See [`mac/ModelGeneratorMac/README.md`](mac/ModelGeneratorMac/README.md) and
+[`docs/HOST_PROTOCOL.md`](docs/HOST_PROTOCOL.md).
 
 ## Building and running
 
@@ -78,6 +92,8 @@ src/
   ModelGenerator.Host   Headless NDJSON RPC bridge (Unix socket / stdio) so a
                          Mac SwiftUI app can call Core without reimplementing
                          geometry — see docs/HOST_PROTOCOL.md.
+mac/
+  ModelGeneratorMac     SwiftUI + SceneKit Mac app (shape preview + STL export).
 tests/
   ModelGenerator.Tests  Unit tests for Core, Data, and Host.
 ```

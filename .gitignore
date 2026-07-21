@@ -9,3 +9,7 @@ dist/
 *.sqlite
 *.sqlite-journal
 *.db
+
+# SwiftPM
+mac/ModelGeneratorMac/.build/
+mac/ModelGeneratorMac/.swiftpm/

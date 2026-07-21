@@ -166,6 +166,14 @@
   locked: **process + JSON-RPC** (not NativeAOT) for the Mac bridge. Integration
   tests cover service methods and session framing.
 
+- **Phase 2 / SwiftUI + SceneKit shell (done):** New `mac/ModelGeneratorMac`
+  Swift package (macOS 14+, SwiftUI App). Starts Host automatically (via
+  `dotnet run` in dev, or `MODELGENERATOR_HOST` / bundled binary), connects with
+  Unix-socket NDJSON client, shows shape inspector (circle/triangle/shield/
+  rectangle, size/thickness/border/colors), live SceneKit preview (top-down
+  camera + orbit), status bar, and Export STL (⌘⇧E). Text/SVG/image/CustomSvg
+  deferred to later phases.
+
 Remaining ideas (not currently planned as a phase): richer validation feedback in dialogs; a
 configurable alpha-inclusion threshold (currently a hardcoded 50%) if the default proves wrong
 for some images in practice; the same off-center-artwork drag-jump class of bug likely also
