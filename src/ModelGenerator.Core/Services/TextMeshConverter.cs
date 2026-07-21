@@ -1,20 +1,16 @@
-using System.Drawing;
-using System.Drawing.Drawing2D;
 using System.Numerics;
-using System.Runtime.Versioning;
 using ModelGenerator.Core.Models;
 using ModelGenerator.Core.Utilities;
+using SkiaSharp;
 
 namespace ModelGenerator.Core.Services;
 
 /// <summary>
-/// Rasterizes text to embossed 3D geometry using GDI+ glyph outlines (System.Drawing), shared
-/// contour extraction (<see cref="GraphicsPathContours"/>), and shared tessellation/extrusion
+/// Rasterizes text to embossed 3D geometry using SkiaSharp glyph outlines, shared contour
+/// extraction (<see cref="SkiaPathContours"/>), and shared tessellation/extrusion
 /// (<see cref="MeshMath.ExtrudeContours"/>) — including glyph counters (the holes in letters
-/// like O/A/B). Windows-only for v1; swap this implementation when porting the font/tessellation
-/// layer to Mac/Linux.
+/// like O/A/B). Cross-platform (Windows/macOS/Linux) via Skia.
 /// </summary>
-[SupportedOSPlatform("windows")]
 public class TextMeshConverter : ITextMeshConverter
 {
     public Mesh ConvertTextToMesh(TextLine textLine)
@@ -35,26 +31,31 @@ public class TextMeshConverter : ITextMeshConverter
             return new List<List<Vector2>>();
         }
 
-        using var fontFamily = ResolveFontFamily(fontName);
-        using var path = new GraphicsPath();
-        using var stringFormat = (StringFormat)StringFormat.GenericTypographic.Clone();
-        stringFormat.FormatFlags |= StringFormatFlags.NoClip;
+        using var typeface = ResolveTypeface(fontName);
+        // Size is in user units (mm), matching the previous GDI+ GraphicsUnit.World convention.
+        using var font = new SKFont(typeface, emSize)
+        {
+            // Outline extraction should not depend on raster hinting — keeps contours stable across OSes.
+            Edging = SKFontEdging.Alias,
+            Hinting = SKFontHinting.None,
+            LinearMetrics = true,
+            Subpixel = false
+        };
 
-        // GraphicsUnit.World with emSize in mm means path coordinates come out directly in mm.
-        path.AddString(text, fontFamily, (int)FontStyle.Regular, emSize, PointF.Empty, stringFormat);
-
-        return GraphicsPathContours.ExtractContours(path);
+        using var path = font.GetTextPath(text, new SKPoint(0, 0));
+        return SkiaPathContours.ExtractContours(path);
     }
 
-    private static FontFamily ResolveFontFamily(string fontName)
+    private static SKTypeface ResolveTypeface(string fontName)
     {
-        try
+        var typeface = SKTypeface.FromFamilyName(fontName);
+        if (typeface is not null && !string.IsNullOrEmpty(typeface.FamilyName))
         {
-            return new FontFamily(fontName);
+            // FromFamilyName always returns something, but may silently fall back; prefer default
+            // only when the requested family is empty/missing entirely.
+            return typeface;
         }
-        catch (ArgumentException)
-        {
-            return FontFamily.GenericSansSerif;
-        }
+
+        return SKTypeface.Default;
     }
 }

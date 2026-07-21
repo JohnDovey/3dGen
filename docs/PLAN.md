@@ -150,6 +150,16 @@
     hook a real edit would); library search-as-you-type correctly filtered a 14-file real library
     down to one match instantly, reusing cached thumbnails. 98 tests passing total.
 
+- **Phase 0 / Mac portability foundation (done):** Core no longer depends on
+  `System.Drawing.Common` / GDI+. Text, SVG, and image conversion plus library
+  thumbnails use **SkiaSharp** + **Svg.Skia**; colors are plain ARGB ints
+  (`ArgbColors`); thumbnail APIs return PNG `byte[]` (WinForms decodes via
+  `PngThumbnail`). `[SupportedOSPlatform("windows")]` gates removed from Core
+  services. Tests retargeted to `net10.0` and pass on macOS (`dotnet test
+  tests/ModelGenerator.Tests` — 98 tests). WinForms still builds (thumbnail
+  callers updated). This unblocks a future SwiftUI Mac host against portable
+  Core/Data.
+
 Remaining ideas (not currently planned as a phase): richer validation feedback in dialogs; a
 configurable alpha-inclusion threshold (currently a hardcoded 50%) if the default proves wrong
 for some images in practice; the same off-center-artwork drag-jump class of bug likely also

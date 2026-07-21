@@ -61,12 +61,16 @@ public class SvgLibraryServiceTests : IDisposable
     }
 
     [Fact]
-    public void RenderThumbnail_ProducesNonEmptyBitmap()
+    public void RenderThumbnail_ProducesNonEmptyPng()
     {
-        using var bitmap = _service.RenderThumbnail(SampleSvg, 64, 64);
+        byte[] png = _service.RenderThumbnail(SampleSvg, 64, 64);
 
-        Assert.Equal(64, bitmap.Width);
-        Assert.Equal(64, bitmap.Height);
+        Assert.NotEmpty(png);
+        // PNG magic number
+        Assert.Equal(0x89, png[0]);
+        Assert.Equal((byte)'P', png[1]);
+        Assert.Equal((byte)'N', png[2]);
+        Assert.Equal((byte)'G', png[3]);
     }
 
     [Fact]

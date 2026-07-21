@@ -1,5 +1,3 @@
-using System.Drawing;
-
 namespace ModelGenerator.Core.Models;
 
 /// <summary>An SVG graphic embossed onto the shape's surface — positioned/adjusted the same way
@@ -31,5 +29,5 @@ public class SvgInsert : IPositionable
     public float PositionZ { get; set; }
     public float RotationZ { get; set; }
 
-    public int ColorArgb { get; set; } = Color.DarkOrange.ToArgb();
+    public int ColorArgb { get; set; } = ArgbColors.DarkOrange;
 }

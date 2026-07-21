@@ -163,17 +163,7 @@ public class ModelOrchestratorTests
         Assert.True(MeshMath.SignedVolume(merged) > 0);
     }
 
-    private static byte[] CreateSampleImage()
-    {
-        using var bitmap = new System.Drawing.Bitmap(10, 10, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-        using (var g = System.Drawing.Graphics.FromImage(bitmap))
-        {
-            g.Clear(System.Drawing.Color.Gray);
-        }
-        using var stream = new MemoryStream();
-        bitmap.Save(stream, System.Drawing.Imaging.ImageFormat.Png);
-        return stream.ToArray();
-    }
+    private static byte[] CreateSampleImage() => TestPng.Solid(10, 10, SkiaSharp.SKColors.Gray);
 
     [Fact]
     public void ExportSTL_WritesFileMatchingGeneratedMesh()

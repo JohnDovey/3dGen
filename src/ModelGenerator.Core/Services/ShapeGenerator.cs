@@ -1,14 +1,11 @@
 using System.Numerics;
-using System.Runtime.Versioning;
 using ModelGenerator.Core.Models;
 using ModelGenerator.Core.Utilities;
 
 namespace ModelGenerator.Core.Services;
 
-/// <summary>Windows-only for v1: the four built-in outlines (Circle/Triangle/Shield/Rectangle)
-/// don't need Windows, but CustomSvg's outline extraction depends on System.Drawing/GDI+ via
-/// SvgContourExtractor, same as TextMeshConverter/SvgMeshConverter.</summary>
-[SupportedOSPlatform("windows")]
+/// <summary>Generates base shape meshes (Circle/Triangle/Shield/Rectangle/CustomSvg). Built-in
+/// outlines are pure math; CustomSvg uses portable SvgContourExtractor (Svg.Skia).</summary>
 public class ShapeGenerator : IShapeGenerator
 {
     private const int CircleSegments = 64;

@@ -1,12 +1,10 @@
-using System.Drawing;
-using System.Runtime.Versioning;
-using Svg;
+using SkiaSharp;
+using Svg.Skia;
 
 namespace ModelGenerator.Core.Services;
 
 /// <summary>Manages the app's local library of SVG files: listing, reading, importing new files
-/// (deduping name collisions), and rendering thumbnails for a picker UI.</summary>
-[SupportedOSPlatform("windows")]
+/// (deduping name collisions), and rendering PNG thumbnails for a picker UI.</summary>
 public class SvgLibraryService : ISvgLibraryService
 {
     private readonly string _libraryDirectory;
@@ -47,10 +45,36 @@ public class SvgLibraryService : ISvgLibraryService
         return fileName;
     }
 
-    public Bitmap RenderThumbnail(string svgContent, int width, int height)
+    public byte[] RenderThumbnail(string svgContent, int width, int height)
     {
-        var document = SvgDocument.FromSvg<SvgDocument>(svgContent);
-        return document.Draw(width, height);
+        using var skSvg = new SKSvg();
+        var picture = skSvg.FromSvg(svgContent);
+        if (picture is null)
+        {
+            return EncodeSolidPlaceholder(width, height);
+        }
+
+        var info = new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Premul);
+        using var surface = SKSurface.Create(info);
+        var canvas = surface.Canvas;
+        canvas.Clear(SKColors.Transparent);
+
+        var bounds = picture.CullRect;
+        if (bounds.Width > 0 && bounds.Height > 0)
+        {
+            float scale = Math.Min(width / bounds.Width, height / bounds.Height);
+            float dx = (width - bounds.Width * scale) * 0.5f;
+            float dy = (height - bounds.Height * scale) * 0.5f;
+            canvas.Translate(dx, dy);
+            canvas.Scale(scale);
+            canvas.Translate(-bounds.Left, -bounds.Top);
+        }
+
+        canvas.DrawPicture(picture);
+
+        using var image = surface.Snapshot();
+        using var data = image.Encode(SKEncodedImageFormat.Png, 90);
+        return data?.ToArray() ?? EncodeSolidPlaceholder(width, height);
     }
 
     public void DeleteFile(string fileName)
@@ -68,4 +92,14 @@ public class SvgLibraryService : ISvgLibraryService
     public IReadOnlyList<string> GetKeywords(string fileName) => _metadata.GetKeywords(fileName);
 
     public void SetKeywords(string fileName, IReadOnlyList<string> keywords) => _metadata.SetKeywords(fileName, keywords);
+
+    private static byte[] EncodeSolidPlaceholder(int width, int height)
+    {
+        var info = new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Premul);
+        using var surface = SKSurface.Create(info);
+        surface.Canvas.Clear(SKColors.LightGray);
+        using var image = surface.Snapshot();
+        using var data = image.Encode(SKEncodedImageFormat.Png, 90);
+        return data?.ToArray() ?? Array.Empty<byte>();
+    }
 }

@@ -1,5 +1,3 @@
-using System.Drawing;
-
 namespace ModelGenerator.Core.Services;
 
 public interface IImageLibraryService
@@ -11,7 +9,9 @@ public interface IImageLibraryService
     /// final filename actually used.</summary>
     string ImportFile(string sourceFilePath);
 
-    Bitmap RenderThumbnail(byte[] imageData, int width, int height);
+    /// <summary>Renders a PNG thumbnail of the image (width × height). UI layers decode the bytes
+    /// into their toolkit image type.</summary>
+    byte[] RenderThumbnail(byte[] imageData, int width, int height);
 
     /// <summary>Permanently removes a file (and its keywords) from the library.</summary>
     void DeleteFile(string fileName);

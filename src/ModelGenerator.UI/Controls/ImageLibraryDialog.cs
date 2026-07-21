@@ -95,7 +95,12 @@ public class ImageLibraryDialog : Form
             try
             {
                 byte[] data = _imageLibrary.ReadImageBytes(fileName);
-                using var bitmap = _imageLibrary.RenderThumbnail(data, 64, 64);
+                using var bitmap = PngThumbnail.TryDecode(_imageLibrary.RenderThumbnail(data, 64, 64));
+                if (bitmap is null)
+                {
+                    continue;
+                }
+                // ImageList.Add clones; keep using-pattern for the source bitmap below.
                 _thumbnails.Images.Add(fileName, bitmap);
             }
             catch (Exception)

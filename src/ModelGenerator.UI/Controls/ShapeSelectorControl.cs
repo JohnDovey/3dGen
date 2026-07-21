@@ -190,7 +190,8 @@ public class ShapeSelectorControl : UserControl
 
         try
         {
-            _customShapeThumbnail.Image = _svgLibrary.RenderThumbnail(_customShapeSvgContent, 32, 32);
+            _customShapeThumbnail.Image?.Dispose();
+            _customShapeThumbnail.Image = PngThumbnail.TryDecode(_svgLibrary.RenderThumbnail(_customShapeSvgContent, 32, 32));
         }
         catch (Exception)
         {

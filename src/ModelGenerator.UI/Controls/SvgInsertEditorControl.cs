@@ -133,7 +133,7 @@ public class SvgInsertEditorControl : UserControl
         try
         {
             _thumbnail.Image?.Dispose();
-            _thumbnail.Image = svgLibrary.RenderThumbnail(svgContent, 48, 48);
+            _thumbnail.Image = PngThumbnail.TryDecode(svgLibrary.RenderThumbnail(svgContent, 48, 48));
         }
         catch (Exception)
         {

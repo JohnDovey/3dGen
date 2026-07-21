@@ -59,11 +59,11 @@ public class SqliteModelRepositoryTests : IDisposable
             Name = "Colorful Model",
             ShapeType = ShapeType.Circle,
             ShapeSize = 60,
-            BaseColorArgb = System.Drawing.Color.Crimson.ToArgb(),
-            BorderColorArgb = System.Drawing.Color.Gold.ToArgb(),
+            BaseColorArgb = -2354116,
+            BorderColorArgb = -10496,
             TextLines =
             {
-                new TextLine { LineNumber = 0, Content = "HI", ColorArgb = System.Drawing.Color.Blue.ToArgb() }
+                new TextLine { LineNumber = 0, Content = "HI", ColorArgb = -16776961 }
             },
             SvgInserts =
             {
@@ -79,7 +79,7 @@ public class SqliteModelRepositoryTests : IDisposable
                     PositionY = 20,
                     PositionZ = 5,
                     RotationZ = 45,
-                    ColorArgb = System.Drawing.Color.Green.ToArgb()
+                    ColorArgb = -16744448
                 }
             }
         };
@@ -88,9 +88,9 @@ public class SqliteModelRepositoryTests : IDisposable
         var loaded = await _repository.GetModelByIdAsync(id);
 
         Assert.NotNull(loaded);
-        Assert.Equal(System.Drawing.Color.Crimson.ToArgb(), loaded!.BaseColorArgb);
-        Assert.Equal(System.Drawing.Color.Gold.ToArgb(), loaded.BorderColorArgb);
-        Assert.Equal(System.Drawing.Color.Blue.ToArgb(), loaded.TextLines[0].ColorArgb);
+        Assert.Equal(-2354116, loaded!.BaseColorArgb);
+        Assert.Equal(-10496, loaded.BorderColorArgb);
+        Assert.Equal(-16776961, loaded.TextLines[0].ColorArgb);
 
         Assert.Single(loaded.SvgInserts);
         var svgInsert = loaded.SvgInserts[0];
@@ -103,7 +103,7 @@ public class SqliteModelRepositoryTests : IDisposable
         Assert.Equal(20, svgInsert.PositionY);
         Assert.Equal(5, svgInsert.PositionZ);
         Assert.Equal(45, svgInsert.RotationZ);
-        Assert.Equal(System.Drawing.Color.Green.ToArgb(), svgInsert.ColorArgb);
+        Assert.Equal(-16744448, svgInsert.ColorArgb);
     }
 
     [Fact]
@@ -170,7 +170,7 @@ public class SqliteModelRepositoryTests : IDisposable
                     PositionY = -8,
                     PositionZ = 3,
                     RotationZ = 90,
-                    ColorArgb = System.Drawing.Color.Purple.ToArgb()
+                    ColorArgb = -8388480
                 }
             }
         };
@@ -192,7 +192,7 @@ public class SqliteModelRepositoryTests : IDisposable
         Assert.Equal(-8, imageInsert.PositionY);
         Assert.Equal(3, imageInsert.PositionZ);
         Assert.Equal(90, imageInsert.RotationZ);
-        Assert.Equal(System.Drawing.Color.Purple.ToArgb(), imageInsert.ColorArgb);
+        Assert.Equal(-8388480, imageInsert.ColorArgb);
     }
 
     [Fact]
@@ -219,17 +219,7 @@ public class SqliteModelRepositoryTests : IDisposable
         Assert.Equal(77, loaded.ImageInserts[0].Scale);
     }
 
-    private static byte[] CreateSampleImageBytes()
-    {
-        using var bitmap = new System.Drawing.Bitmap(10, 10, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-        using (var g = System.Drawing.Graphics.FromImage(bitmap))
-        {
-            g.Clear(System.Drawing.Color.Gray);
-        }
-        using var stream = new MemoryStream();
-        bitmap.Save(stream, System.Drawing.Imaging.ImageFormat.Png);
-        return stream.ToArray();
-    }
+    private static byte[] CreateSampleImageBytes() => TestPng.Solid(10, 10, SkiaSharp.SKColors.Gray);
 
     [Fact]
     public async Task SaveModelAsync_OnUpdate_ReplacesSvgInsertsLikeTextLines()

@@ -1,14 +1,10 @@
-using System.Drawing;
-using System.Drawing.Drawing2D;
-using System.Runtime.Versioning;
+using SkiaSharp;
 
 namespace ModelGenerator.Core.Services;
 
 /// <summary>Manages the app's local library of JPG/PNG files: listing, reading, importing new
-/// files (deduping name collisions), and rendering thumbnails for a picker UI — mirrors
-/// SvgLibraryService, but thumbnailing a raster image is a plain GDI+ resize rather than SVG
-/// parsing/rendering, so it's kept as a separate implementation.</summary>
-[SupportedOSPlatform("windows")]
+/// files (deduping name collisions), and rendering PNG thumbnails for a picker UI — mirrors
+/// SvgLibraryService.</summary>
 public class ImageLibraryService : IImageLibraryService
 {
     private static readonly string[] ImageExtensions = { "*.png", "*.jpg", "*.jpeg" };
@@ -61,14 +57,23 @@ public class ImageLibraryService : IImageLibraryService
         return fileName;
     }
 
-    public Bitmap RenderThumbnail(byte[] imageData, int width, int height)
+    public byte[] RenderThumbnail(byte[] imageData, int width, int height)
     {
-        using var source = new Bitmap(new MemoryStream(imageData));
-        var thumbnail = new Bitmap(width, height);
-        using var g = Graphics.FromImage(thumbnail);
-        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-        g.DrawImage(source, 0, 0, width, height);
-        return thumbnail;
+        using var source = SKBitmap.Decode(imageData);
+        if (source is null)
+        {
+            return EncodeSolidPlaceholder(width, height);
+        }
+
+        var info = new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Premul);
+        using var surface = SKSurface.Create(info);
+        var canvas = surface.Canvas;
+        canvas.Clear(SKColors.Transparent);
+        canvas.DrawBitmap(source, new SKRect(0, 0, width, height));
+
+        using var image = surface.Snapshot();
+        using var data = image.Encode(SKEncodedImageFormat.Png, 90);
+        return data?.ToArray() ?? EncodeSolidPlaceholder(width, height);
     }
 
     public void DeleteFile(string fileName)
@@ -86,4 +91,14 @@ public class ImageLibraryService : IImageLibraryService
     public IReadOnlyList<string> GetKeywords(string fileName) => _metadata.GetKeywords(fileName);
 
     public void SetKeywords(string fileName, IReadOnlyList<string> keywords) => _metadata.SetKeywords(fileName, keywords);
+
+    private static byte[] EncodeSolidPlaceholder(int width, int height)
+    {
+        var info = new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Premul);
+        using var surface = SKSurface.Create(info);
+        surface.Canvas.Clear(SKColors.LightGray);
+        using var image = surface.Snapshot();
+        using var data = image.Encode(SKEncodedImageFormat.Png, 90);
+        return data?.ToArray() ?? Array.Empty<byte>();
+    }
 }

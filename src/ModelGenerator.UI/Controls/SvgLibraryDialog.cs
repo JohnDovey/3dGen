@@ -95,8 +95,11 @@ public class SvgLibraryDialog : Form
             try
             {
                 string content = _svgLibrary.ReadSvgContent(fileName);
-                using var bitmap = _svgLibrary.RenderThumbnail(content, 64, 64);
-                _thumbnails.Images.Add(fileName, bitmap);
+                using var bitmap = PngThumbnail.TryDecode(_svgLibrary.RenderThumbnail(content, 64, 64));
+                if (bitmap is not null)
+                {
+                    _thumbnails.Images.Add(fileName, bitmap);
+                }
             }
             catch (Exception)
             {

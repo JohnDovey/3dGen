@@ -1,5 +1,3 @@
-using System.Drawing;
-
 namespace ModelGenerator.Core.Models;
 
 public enum ImageDetail
@@ -46,5 +44,5 @@ public class ImageInsert : IPositionable
     public float PositionZ { get; set; }
     public float RotationZ { get; set; }
 
-    public int ColorArgb { get; set; } = Color.DarkOrange.ToArgb();
+    public int ColorArgb { get; set; } = ArgbColors.DarkOrange;
 }

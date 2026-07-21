@@ -1,13 +1,11 @@
-using System.Runtime.Versioning;
 using ModelGenerator.Core.Models;
 using ModelGenerator.Core.Utilities;
 
 namespace ModelGenerator.Core.Services;
 
-/// <summary>Wires shape generation, text/SVG-to-mesh conversion, positioning, and composition
-/// into the full parameters -> mesh workflow. Windows-only for v1 (depends on
-/// TextMeshConverter/SvgMeshConverter).</summary>
-[SupportedOSPlatform("windows")]
+/// <summary>Wires shape generation, text/SVG/image-to-mesh conversion, positioning, and
+/// composition into the full parameters → mesh workflow. Cross-platform once Core converters
+/// are portable (Skia / Svg.Skia).</summary>
 public class ModelOrchestrator : IModelOrchestrator
 {
     private readonly IShapeGenerator _shapeGenerator;

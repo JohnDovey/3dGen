@@ -79,9 +79,10 @@ tests/
   ModelGenerator.Tests  Unit tests for Core and Data.
 ```
 
-`ModelGenerator.Core` and `ModelGenerator.Data` have no Windows Forms dependency,
-so the UI layer can be swapped out (e.g. for a Mac/Linux front end) without
-touching the geometry or persistence logic.
+`ModelGenerator.Core` and `ModelGenerator.Data` have no Windows Forms dependency
+and no GDI+ dependency — geometry, text/SVG/image conversion, and SQLite all run
+on macOS as well as Windows — so a Mac (SwiftUI) UI can share the same Core/Data
+via a host process without rewriting mesh math.
 
 ## Tech stack
 
@@ -91,10 +92,21 @@ touching the geometry or persistence logic.
 - [LibTessDotNet](https://github.com/speps/LibTessDotNet) for tessellating glyph
   and SVG outlines (including holes, e.g. the counter of a letter "O" or an SVG
   cutout)
-- [Svg](https://github.com/svg-net/SVG) for parsing SVG graphics and extracting
-  their outlines
+- [SkiaSharp](https://github.com/mono/SkiaSharp) + [Svg.Skia](https://github.com/wieslawsoltes/Svg.Skia)
+  for portable text/SVG/image conversion and library thumbnails (Core runs on
+  Windows and macOS)
 - SQLite via `Microsoft.Data.Sqlite`
 - xUnit for tests
+
+Core and Data are UI-toolkit-agnostic and portable. On macOS you can build and
+run the test suite without Windows targeting:
+
+```
+dotnet test tests/ModelGenerator.Tests
+```
+
+(The WinForms project still requires Windows, or `EnableWindowsTargeting=true`
+to cross-compile from another OS.)
 
 ## Copyright
 

@@ -1,6 +1,5 @@
-using System.Drawing;
-using System.Drawing.Imaging;
 using ModelGenerator.Core.Services;
+using SkiaSharp;
 using Xunit;
 
 namespace ModelGenerator.Tests;
@@ -59,14 +58,17 @@ public class ImageLibraryServiceTests : IDisposable
     }
 
     [Fact]
-    public void RenderThumbnail_ProducesRequestedSizeBitmap()
+    public void RenderThumbnail_ProducesNonEmptyPng()
     {
         byte[] sampleImage = CreateSamplePng();
 
-        using var bitmap = _service.RenderThumbnail(sampleImage, 64, 64);
+        byte[] png = _service.RenderThumbnail(sampleImage, 64, 64);
 
-        Assert.Equal(64, bitmap.Width);
-        Assert.Equal(64, bitmap.Height);
+        Assert.NotEmpty(png);
+        Assert.Equal(0x89, png[0]);
+        Assert.Equal((byte)'P', png[1]);
+        Assert.Equal((byte)'N', png[2]);
+        Assert.Equal((byte)'G', png[3]);
     }
 
     [Fact]
@@ -133,17 +135,7 @@ public class ImageLibraryServiceTests : IDisposable
         Assert.DoesNotContain(importedName, _service.SearchFiles("nonexistent-tag"));
     }
 
-    private static byte[] CreateSamplePng()
-    {
-        using var bitmap = new Bitmap(10, 10, PixelFormat.Format32bppArgb);
-        using (var g = Graphics.FromImage(bitmap))
-        {
-            g.Clear(Color.Gray);
-        }
-        using var stream = new MemoryStream();
-        bitmap.Save(stream, ImageFormat.Png);
-        return stream.ToArray();
-    }
+    private static byte[] CreateSamplePng() => TestPng.Solid(10, 10, SKColors.Gray);
 
     public void Dispose()
     {

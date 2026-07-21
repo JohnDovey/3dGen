@@ -149,7 +149,7 @@ public class ImageInsertEditorControl : UserControl
         try
         {
             _thumbnail.Image?.Dispose();
-            _thumbnail.Image = imageLibrary.RenderThumbnail(imageData, 48, 48);
+            _thumbnail.Image = PngThumbnail.TryDecode(imageLibrary.RenderThumbnail(imageData, 48, 48));
         }
         catch (Exception)
         {

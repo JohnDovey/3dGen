@@ -1,5 +1,3 @@
-using System.Drawing;
-
 namespace ModelGenerator.Core.Services;
 
 public interface ISvgLibraryService
@@ -11,7 +9,9 @@ public interface ISvgLibraryService
     /// final filename actually used.</summary>
     string ImportFile(string sourceFilePath);
 
-    Bitmap RenderThumbnail(string svgContent, int width, int height);
+    /// <summary>Renders a PNG thumbnail of the SVG (width × height). UI layers decode the bytes
+    /// into their toolkit image type (Bitmap, NSImage, etc.).</summary>
+    byte[] RenderThumbnail(string svgContent, int width, int height);
 
     /// <summary>Permanently removes a file (and its keywords) from the library.</summary>
     void DeleteFile(string fileName);

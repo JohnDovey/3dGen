@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Runtime.Versioning;
 using ModelGenerator.Core.Models;
 using ModelGenerator.Core.Utilities;
 
@@ -8,12 +7,11 @@ namespace ModelGenerator.Core.Services;
 /// <summary>
 /// Converts an SVG document to embossed 3D geometry using the shared SVG contour-extraction
 /// (<see cref="SvgContourExtractor"/>) and tessellation/extrusion pipeline
-/// (<see cref="MeshMath.ExtrudeContours"/>) — every SvgVisualElement's outline in the document is
-/// combined into one tessellation pass, so holes/cutouts (e.g. a logo with a cutout) are handled
-/// correctly via the nonzero winding rule, the same way a glyph counter is. Windows-only for v1,
-/// same as TextMeshConverter (depends on System.Drawing/GDI+).
+/// (<see cref="MeshMath.ExtrudeContours"/>) — every path-bearing drawable's outline in the
+/// document is combined into one tessellation pass, so holes/cutouts (e.g. a logo with a cutout)
+/// are handled correctly via the nonzero winding rule, the same way a glyph counter is.
+/// Cross-platform via Svg.Skia.
 /// </summary>
-[SupportedOSPlatform("windows")]
 public class SvgMeshConverter : ISvgMeshConverter
 {
     public Mesh ConvertSvgToMesh(SvgInsert insert)

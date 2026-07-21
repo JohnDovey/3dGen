@@ -1,5 +1,3 @@
-using System.Drawing;
-
 namespace ModelGenerator.Core.Models;
 
 public class Model
@@ -18,8 +16,8 @@ public class Model
     public float BorderThickness { get; set; } = 5f;
     public float BorderHeight { get; set; } = 5f;
 
-    public int BaseColorArgb { get; set; } = Color.LightSteelBlue.ToArgb();
-    public int BorderColorArgb { get; set; } = Color.LightSteelBlue.ToArgb();
+    public int BaseColorArgb { get; set; } = ArgbColors.LightSteelBlue;
+    public int BorderColorArgb { get; set; } = ArgbColors.LightSteelBlue;
 
     /// <summary>Full SVG XML content defining the shape's outline, used only when ShapeType is
     /// CustomSvg — self-contained like SvgInsert.SvgContent, so the model stays valid even if the

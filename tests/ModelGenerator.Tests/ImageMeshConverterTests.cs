@@ -1,9 +1,8 @@
-using System.Drawing;
-using System.Drawing.Imaging;
 using System.Numerics;
 using ModelGenerator.Core.Models;
 using ModelGenerator.Core.Services;
 using ModelGenerator.Core.Utilities;
+using SkiaSharp;
 using Xunit;
 using CoreMesh = ModelGenerator.Core.Models.Mesh;
 
@@ -16,7 +15,7 @@ public class ImageMeshConverterTests
     [Fact]
     public void ConvertImageToMesh_SolidOpaqueImage_ProducesWatertightMesh()
     {
-        byte[] imageData = CreateTestPng(20, 20, g => g.FillRectangle(Brushes.Gray, 0, 0, 20, 20));
+        byte[] imageData = TestPng.Solid(20, 20, SKColors.Gray);
         var insert = new ImageInsert { ImageData = imageData, Scale = 40, ReliefHeight = 5, Detail = ImageDetail.Low };
 
         var mesh = _converter.ConvertImageToMesh(insert);
@@ -29,7 +28,7 @@ public class ImageMeshConverterTests
     [Fact]
     public void ConvertImageToMesh_OpaqueSquareImage_FootprintMatchesScale()
     {
-        byte[] imageData = CreateTestPng(50, 50, g => g.FillRectangle(Brushes.Gray, 0, 0, 50, 50));
+        byte[] imageData = TestPng.Solid(50, 50, SKColors.Gray);
         var insert = new ImageInsert { ImageData = imageData, Scale = 40, ReliefHeight = 5, Detail = ImageDetail.Low };
 
         var mesh = _converter.ConvertImageToMesh(insert);
@@ -42,7 +41,7 @@ public class ImageMeshConverterTests
     [Fact]
     public void ConvertImageToMesh_HigherDetail_ProducesMoreVertices()
     {
-        byte[] imageData = CreateTestPng(50, 50, g => g.FillRectangle(Brushes.Gray, 0, 0, 50, 50));
+        byte[] imageData = TestPng.Solid(50, 50, SKColors.Gray);
         var low = new ImageInsert { ImageData = imageData, Scale = 40, ReliefHeight = 5, Detail = ImageDetail.Low };
         var high = new ImageInsert { ImageData = imageData, Scale = 40, ReliefHeight = 5, Detail = ImageDetail.High };
 
@@ -55,10 +54,12 @@ public class ImageMeshConverterTests
     [Fact]
     public void ConvertImageToMesh_Invert_FlipsWhichSideIsTallest()
     {
-        byte[] imageData = CreateTestPng(40, 40, g =>
+        byte[] imageData = TestPng.Create(40, 40, canvas =>
         {
-            g.FillRectangle(Brushes.Black, 0, 0, 20, 40);
-            g.FillRectangle(Brushes.White, 20, 0, 20, 40);
+            using var black = new SKPaint { Color = SKColors.Black, Style = SKPaintStyle.Fill };
+            using var white = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Fill };
+            canvas.DrawRect(0, 0, 20, 40, black);
+            canvas.DrawRect(20, 0, 20, 40, white);
         });
 
         var normal = new ImageInsert { ImageData = imageData, Scale = 40, ReliefHeight = 5, Detail = ImageDetail.Low, Invert = false };
@@ -74,10 +75,12 @@ public class ImageMeshConverterTests
     [Fact]
     public void ConvertImageToMesh_TransparentHalf_ClipsFootprintToOpaqueSide()
     {
-        byte[] opaqueData = CreateTestPng(40, 40, g => g.FillRectangle(Brushes.Gray, 0, 0, 40, 40));
-        byte[] halfTransparentData = CreateTestPng(40, 40, g => g.FillRectangle(Brushes.Gray, 0, 0, 20, 40));
-        // Right half of halfTransparentData is left untouched, i.e. still fully transparent from
-        // CreateTestPng's initial Color.Transparent clear.
+        byte[] opaqueData = TestPng.Solid(40, 40, SKColors.Gray);
+        byte[] halfTransparentData = TestPng.Create(40, 40, canvas =>
+        {
+            using var paint = new SKPaint { Color = SKColors.Gray, Style = SKPaintStyle.Fill };
+            canvas.DrawRect(0, 0, 20, 40, paint);
+        });
 
         var opaqueInsert = new ImageInsert { ImageData = opaqueData, Scale = 40, ReliefHeight = 5, Detail = ImageDetail.Low };
         var halfInsert = new ImageInsert { ImageData = halfTransparentData, Scale = 40, ReliefHeight = 5, Detail = ImageDetail.Low };
@@ -94,12 +97,11 @@ public class ImageMeshConverterTests
     [Fact]
     public void ConvertImageToMesh_OpaqueContentOffCenterInLargerCanvas_MeshIsCenteredAtOrigin()
     {
-        // A small opaque square tucked in one corner of a much bigger transparent canvas — the
-        // image-insert analog of the SVG "canvas bigger than the drawing" bug: local (0,0) (what
-        // PositionX/Y and viewport dragging actually move) used to sit at the center of the full
-        // canvas rather than the visible relief, making a drag appear to yank it out from under
-        // the cursor the instant it started.
-        byte[] imageData = CreateTestPng(100, 100, g => g.FillRectangle(Brushes.Gray, 5, 5, 20, 20));
+        byte[] imageData = TestPng.Create(100, 100, canvas =>
+        {
+            using var paint = new SKPaint { Color = SKColors.Gray, Style = SKPaintStyle.Fill };
+            canvas.DrawRect(5, 5, 20, 20, paint);
+        });
         var insert = new ImageInsert { ImageData = imageData, Scale = 40, ReliefHeight = 5, Detail = ImageDetail.Medium };
 
         var mesh = _converter.ConvertImageToMesh(insert);
@@ -114,18 +116,5 @@ public class ImageMeshConverterTests
     {
         float maxZ = mesh.Vertices.Max(v => v.Z);
         return mesh.Vertices.Where(v => v.Z > maxZ - 0.01f).Average(v => v.X);
-    }
-
-    private static byte[] CreateTestPng(int width, int height, Action<Graphics> paint)
-    {
-        using var bitmap = new Bitmap(width, height, PixelFormat.Format32bppArgb);
-        using (var g = Graphics.FromImage(bitmap))
-        {
-            g.Clear(Color.Transparent);
-            paint(g);
-        }
-        using var stream = new MemoryStream();
-        bitmap.Save(stream, ImageFormat.Png);
-        return stream.ToArray();
     }
 }

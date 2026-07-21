@@ -1,10 +1,7 @@
-using System.Drawing;
-using System.Drawing.Imaging;
 using System.Numerics;
-using System.Runtime.InteropServices;
-using System.Runtime.Versioning;
 using ModelGenerator.Core.Models;
 using ModelGenerator.Core.Utilities;
+using SkiaSharp;
 
 namespace ModelGenerator.Core.Services;
 
@@ -13,17 +10,16 @@ namespace ModelGenerator.Core.Services;
 /// a heightmap grid (MeshMath.ExtrudeMaskedHeightfield), and any PNG alpha channel clips the
 /// footprint to the image's actual silhouette instead of always producing a rectangular tile — a
 /// JPG (or a fully-opaque PNG) has no alpha variation, so every cell ends up included and this
-/// degenerates to a plain rectangular relief tile. Windows-only for v1, same as
-/// TextMeshConverter/SvgMeshConverter (depends on System.Drawing/GDI+).
+/// degenerates to a plain rectangular relief tile. Cross-platform via SkiaSharp decode + pixel
+/// buffer sampling (replaces the previous GDI+ LockBits path).
 /// </summary>
-[SupportedOSPlatform("windows")]
 public class ImageMeshConverter : IImageMeshConverter
 {
     private const float AlphaInclusionThreshold = 0.5f;
 
     public Mesh ConvertImageToMesh(ImageInsert insert)
     {
-        using var bitmap = new Bitmap(new MemoryStream(insert.ImageData));
+        using var bitmap = DecodeToRgba(insert.ImageData);
 
         int longerSamples = SamplesForDetail(insert.Detail);
         int cellCols, cellRows;
@@ -90,62 +86,82 @@ public class ImageMeshConverter : IImageMeshConverter
         _ => 64
     };
 
+    private static SKBitmap DecodeToRgba(byte[] imageData)
+    {
+        using var decoded = SKBitmap.Decode(imageData)
+            ?? throw new InvalidOperationException("Could not decode image data.");
+
+        if (decoded.ColorType == SKColorType.Rgba8888 && decoded.AlphaType != SKAlphaType.Opaque)
+        {
+            // Already a convenient layout; clone so the using-scope owns a unique instance.
+            return decoded.Copy() ?? throw new InvalidOperationException("Could not copy decoded image.");
+        }
+
+        var info = new SKImageInfo(decoded.Width, decoded.Height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
+        var converted = new SKBitmap(info);
+        if (!decoded.CopyTo(converted))
+        {
+            converted.Dispose();
+            throw new InvalidOperationException("Could not convert image to RGBA.");
+        }
+
+        return converted;
+    }
+
     /// <summary>Box-samples every cell's block of source pixels into average luminance (0..1) and
-    /// average alpha (0..1), via LockBits for speed — this runs on every live-preview
-    /// regeneration, and per-pixel GetPixel calls are far too slow for anything but tiny images.
-    /// Requesting Format32bppArgb from LockBits works regardless of the source's native pixel
-    /// format (GDI+ converts internally), so this handles JPGs (no alpha) and any PNG variant.</summary>
-    private static (float[,] Luminance, float[,] Alpha) SampleCells(Bitmap source, int cellRows, int cellCols)
+    /// average alpha (0..1) from a tightly packed RGBA8888 buffer — this runs on every live-preview
+    /// regeneration.</summary>
+    private static (float[,] Luminance, float[,] Alpha) SampleCells(SKBitmap source, int cellRows, int cellCols)
     {
         var luminance = new float[cellRows, cellCols];
         var alpha = new float[cellRows, cellCols];
 
-        var rect = new Rectangle(0, 0, source.Width, source.Height);
-        var data = source.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
-        try
+        IntPtr pixels = source.GetPixels();
+        if (pixels == IntPtr.Zero)
         {
-            int stride = data.Stride;
-            int byteCount = stride * source.Height;
-            var buffer = new byte[byteCount];
-            Marshal.Copy(data.Scan0, buffer, 0, byteCount);
-
-            for (int cellRow = 0; cellRow < cellRows; cellRow++)
-            {
-                int y0 = (int)((long)cellRow * source.Height / cellRows);
-                int y1 = Math.Min(source.Height, Math.Max(y0 + 1, (int)((long)(cellRow + 1) * source.Height / cellRows)));
-
-                for (int cellCol = 0; cellCol < cellCols; cellCol++)
-                {
-                    int x0 = (int)((long)cellCol * source.Width / cellCols);
-                    int x1 = Math.Min(source.Width, Math.Max(x0 + 1, (int)((long)(cellCol + 1) * source.Width / cellCols)));
-
-                    long sumLuminance = 0;
-                    long sumAlpha = 0;
-                    int count = 0;
-                    for (int y = y0; y < y1; y++)
-                    {
-                        int rowOffset = y * stride;
-                        for (int x = x0; x < x1; x++)
-                        {
-                            int i = rowOffset + x * 4;
-                            byte b = buffer[i];
-                            byte g = buffer[i + 1];
-                            byte r = buffer[i + 2];
-                            byte a = buffer[i + 3];
-                            sumLuminance += (long)(0.299 * r + 0.587 * g + 0.114 * b);
-                            sumAlpha += a;
-                            count++;
-                        }
-                    }
-
-                    luminance[cellRow, cellCol] = count > 0 ? sumLuminance / (255f * count) : 0f;
-                    alpha[cellRow, cellCol] = count > 0 ? sumAlpha / (255f * count) : 1f;
-                }
-            }
+            return (luminance, alpha);
         }
-        finally
+
+        int width = source.Width;
+        int height = source.Height;
+        int rowBytes = source.RowBytes;
+        // Copy once into managed memory for safe, bounds-checked indexing.
+        var buffer = new byte[rowBytes * height];
+        System.Runtime.InteropServices.Marshal.Copy(pixels, buffer, 0, buffer.Length);
+
+        for (int cellRow = 0; cellRow < cellRows; cellRow++)
         {
-            source.UnlockBits(data);
+            int y0 = (int)((long)cellRow * height / cellRows);
+            int y1 = Math.Min(height, Math.Max(y0 + 1, (int)((long)(cellRow + 1) * height / cellRows)));
+
+            for (int cellCol = 0; cellCol < cellCols; cellCol++)
+            {
+                int x0 = (int)((long)cellCol * width / cellCols);
+                int x1 = Math.Min(width, Math.Max(x0 + 1, (int)((long)(cellCol + 1) * width / cellCols)));
+
+                long sumLuminance = 0;
+                long sumAlpha = 0;
+                int count = 0;
+                for (int y = y0; y < y1; y++)
+                {
+                    int rowOffset = y * rowBytes;
+                    for (int x = x0; x < x1; x++)
+                    {
+                        int i = rowOffset + x * 4;
+                        byte r = buffer[i];
+                        byte g = buffer[i + 1];
+                        byte b = buffer[i + 2];
+                        byte a = buffer[i + 3];
+                        sumLuminance += (long)(0.299 * r + 0.587 * g + 0.114 * b);
+                        sumAlpha += a;
+                        count++;
+                    }
+                }
+
+                luminance[cellRow, cellCol] = count > 0 ? sumLuminance / (255f * count) : 0f;
+                // Fully-opaque sources (JPG / opaque PNG) have a=255 everywhere → alpha averages to 1.
+                alpha[cellRow, cellCol] = count > 0 ? sumAlpha / (255f * count) : 1f;
+            }
         }
 
         return (luminance, alpha);
