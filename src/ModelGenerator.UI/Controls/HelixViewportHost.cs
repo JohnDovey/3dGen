@@ -36,6 +36,7 @@ public class HelixViewportHost : UserControl
 
     private ModelVisual3D? _floorVisual;
     private ModelVisual3D? _borderVisual;
+    private readonly List<ModelVisual3D> _borderTextVisuals = new();
     private LinesVisual3D? _selectionVisual;
     private (DraggableItemKind Kind, int Index)? _selectedItem;
     private bool _isDragging;
@@ -107,7 +108,9 @@ public class HelixViewportHost : UserControl
                     continue;
                 }
 
-                _viewport.Children.Add(new ModelVisual3D { Content = BuildModel(bt.Mesh, bt.Color) });
+                var borderTextVisual = new ModelVisual3D { Content = BuildModel(bt.Mesh, bt.Color) };
+                _viewport.Children.Add(borderTextVisual);
+                _borderTextVisuals.Add(borderTextVisual);
             }
         }
 
@@ -150,6 +153,12 @@ public class HelixViewportHost : UserControl
             _viewport.Children.Remove(visual);
         }
         _draggableVisualToItem.Clear();
+
+        foreach (var visual in _borderTextVisuals)
+        {
+            _viewport.Children.Remove(visual);
+        }
+        _borderTextVisuals.Clear();
 
         if (_selectionVisual is not null)
         {
