@@ -50,6 +50,7 @@ public class ModelOrchestrator : IModelOrchestrator
     {
         var (outer, inner) = _shapeGenerator.GenerateBorderOutline(model);
         var (midline, midlineLength) = BorderTextMeshConverter.BuildMidline(outer, inner);
+        float bandWidth = BorderTextMeshConverter.BorderBandWidth(outer, inner);
 
         var engraved = model.BorderTextLines.Where(l => l.Mode == BorderTextMode.Engraved && !string.IsNullOrEmpty(l.Content)).ToList();
         var cutouts = new List<IReadOnlyList<Vector2>>();
@@ -59,7 +60,7 @@ public class ModelOrchestrator : IModelOrchestrator
             cutoutDepth = engraved.Max(l => l.Height);
             foreach (var line in engraved)
             {
-                cutouts.AddRange(_borderTextMeshConverter.LayoutGlyphContours(line, midline, midlineLength));
+                cutouts.AddRange(_borderTextMeshConverter.LayoutGlyphContours(line, midline, midlineLength, bandWidth));
             }
         }
 

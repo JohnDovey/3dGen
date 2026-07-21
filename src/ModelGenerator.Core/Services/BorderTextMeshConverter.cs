@@ -21,7 +21,8 @@ public sealed class BorderTextMeshConverter : IBorderTextMeshConverter
         }
 
         var (midline, length) = BuildMidline(borderOuter, borderInner);
-        var contours = LayoutGlyphContours(borderText, midline, length);
+        float bandWidth = BorderBandWidth(borderOuter, borderInner);
+        var contours = LayoutGlyphContours(borderText, midline, length, bandWidth);
         if (contours.Count == 0)
         {
             return new Mesh();
@@ -40,7 +41,8 @@ public sealed class BorderTextMeshConverter : IBorderTextMeshConverter
     public IReadOnlyList<IReadOnlyList<Vector2>> LayoutGlyphContours(
         BorderTextLine borderText,
         IReadOnlyList<Vector2> borderMidline,
-        float totalMidlineLength)
+        float totalMidlineLength,
+        float bandWidth)
     {
         if (string.IsNullOrEmpty(borderText.Content) || borderMidline.Count < 2 || totalMidlineLength <= 0)
         {
@@ -48,8 +50,8 @@ public sealed class BorderTextMeshConverter : IBorderTextMeshConverter
         }
 
         using var typeface = SkiaFontResolver.ResolveTypeface(borderText.FontName);
-        float fontSize = borderText.FontSize;
-        using var font = new SKFont(typeface, fontSize)
+        float naturalFontSize = borderText.FontSize;
+        using var font = new SKFont(typeface, naturalFontSize)
         {
             Edging = SKFontEdging.Alias,
             Hinting = SKFontHinting.None,
@@ -70,13 +72,28 @@ public sealed class BorderTextMeshConverter : IBorderTextMeshConverter
             naturalWidth += widths[i];
         }
 
-        // Natural size; shrink only if the string would wrap more than once around the loop.
-        float scale = 1f;
+        // Natural size; shrink only if the string would wrap more than once around the loop...
+        float widthScale = 1f;
         if (naturalWidth > totalMidlineLength && naturalWidth > 1e-6f)
         {
-            scale = totalMidlineLength / naturalWidth;
-            fontSize *= scale;
+            widthScale = totalMidlineLength / naturalWidth;
         }
+
+        // ...or if it would poke out past the border's outer/inner edges — ascent+descent (not
+        // just this string's own glyphs) so the shrink stays stable regardless of which
+        // characters happen to be typed.
+        float heightScale = 1f;
+        if (bandWidth > 0)
+        {
+            var naturalMetrics = font.Metrics;
+            float naturalVerticalExtent = -naturalMetrics.Ascent + naturalMetrics.Descent;
+            if (naturalVerticalExtent > bandWidth && naturalVerticalExtent > 1e-6f)
+            {
+                heightScale = bandWidth / naturalVerticalExtent;
+            }
+        }
+
+        float fontSize = naturalFontSize * MathF.Min(widthScale, heightScale);
 
         using var scaledFont = new SKFont(typeface, fontSize)
         {
@@ -91,6 +108,12 @@ public sealed class BorderTextMeshConverter : IBorderTextMeshConverter
         {
             spanWidth += widths[i];
         }
+
+        // Recenter the (possibly shrunk) glyphs on the midline using the font's own metrics
+        // rather than this specific string's rendered bounds, so baseline placement stays
+        // consistent regardless of which characters are typed.
+        var scaledMetrics = scaledFont.Metrics;
+        float verticalShift = (scaledMetrics.Ascent + scaledMetrics.Descent) / 2f;
 
         // Arc-length table on the closed midline.
         var (cum, totalLen) = BuildArcLengthTable(borderMidline);
@@ -139,7 +162,7 @@ public sealed class BorderTextMeshConverter : IBorderTextMeshConverter
                 {
                     // Local: X along baseline, Y up (SkiaPathContours already negated Y from Skia).
                     float lx = p.X - halfAdvance;
-                    float ly = p.Y;
+                    float ly = p.Y + verticalShift;
                     float wx = position.X + lx * cos - ly * sin;
                     float wy = position.Y + lx * sin + ly * cos;
                     world.Add(new Vector2(wx, wy));
@@ -173,6 +196,24 @@ public sealed class BorderTextMeshConverter : IBorderTextMeshConverter
         }
 
         return (midline, length);
+    }
+
+    /// <summary>Average distance between corresponding outer/inner points — the border's radial
+    /// width, i.e. how tall glyphs can be before they poke out past its outer or inner edge.</summary>
+    public static float BorderBandWidth(IReadOnlyList<Vector2> outer, IReadOnlyList<Vector2> inner)
+    {
+        int n = Math.Min(outer.Count, inner.Count);
+        if (n == 0)
+        {
+            return 0f;
+        }
+
+        float sum = 0;
+        for (int i = 0; i < n; i++)
+        {
+            sum += Vector2.Distance(outer[i], inner[i]);
+        }
+        return sum / n;
     }
 
     private static (float[] Cumulative, float Total) BuildArcLengthTable(IReadOnlyList<Vector2> loop)
