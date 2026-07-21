@@ -221,4 +221,33 @@ public class HostServiceTests : IDisposable
         Assert.True(doc.RootElement.GetProperty("id").GetInt32() > 0);
         Assert.Equal("RpcSave", doc.RootElement.GetProperty("name").GetString());
     }
+
+    [Fact]
+    public void SvgLibrary_ImportSearchTagDelete_AndThumbnail()
+    {
+        const string svg = """
+            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10">
+              <rect x="0" y="0" width="10" height="10" />
+            </svg>
+            """;
+        string source = Path.Combine(_tempDir, "star.svg");
+        File.WriteAllText(source, svg);
+
+        var imported = _service.ImportSvgFile(source);
+        Assert.Equal("star.svg", imported.FileName);
+
+        _service.SetSvgKeywords(imported.FileName, new[] { "badge", "logo" });
+        var found = _service.ListSvgFiles("badge");
+        Assert.Contains(found.Files, f => f.FileName == "star.svg" && f.Keywords.Contains("badge"));
+
+        var content = _service.ReadSvgContent(imported.FileName);
+        Assert.Contains("<rect", content.Content);
+
+        var thumb = _service.RenderSvgThumbnail(imported.FileName, svgContent: null, width: 32, height: 32);
+        Assert.True(thumb.Png.Length > 8);
+        Assert.Equal(0x89, thumb.Png[0]); // PNG magic
+
+        _service.DeleteSvgFile(imported.FileName);
+        Assert.DoesNotContain(_service.ListSvgFiles().Files, f => f.FileName == "star.svg");
+    }
 }

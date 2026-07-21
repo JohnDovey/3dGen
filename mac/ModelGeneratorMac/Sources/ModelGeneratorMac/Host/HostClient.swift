@@ -48,6 +48,54 @@ actor HostClient {
         return try await call(method: "deleteModel", params: Params(id: id), as: DeleteModelResult.self)
     }
 
+    // MARK: SVG library
+
+    func listSvgFiles(query: String = "") async throws -> SvgLibraryListResult {
+        struct Params: Encodable { let query: String }
+        return try await call(method: "listSvgFiles", params: Params(query: query), as: SvgLibraryListResult.self)
+    }
+
+    func readSvgContent(fileName: String) async throws -> SvgContentResult {
+        struct Params: Encodable { let fileName: String }
+        return try await call(method: "readSvgContent", params: Params(fileName: fileName), as: SvgContentResult.self)
+    }
+
+    func importSvgFile(path: String) async throws -> SvgImportResult {
+        struct Params: Encodable { let path: String }
+        return try await call(method: "importSvgFile", params: Params(path: path), as: SvgImportResult.self)
+    }
+
+    func deleteSvgFile(fileName: String) async throws -> SvgImportResult {
+        struct Params: Encodable { let fileName: String }
+        return try await call(method: "deleteSvgFile", params: Params(fileName: fileName), as: SvgImportResult.self)
+    }
+
+    func setSvgKeywords(fileName: String, keywords: [String]) async throws -> SvgKeywordsResult {
+        struct Params: Encodable {
+            let fileName: String
+            let keywords: [String]
+        }
+        return try await call(
+            method: "setSvgKeywords",
+            params: Params(fileName: fileName, keywords: keywords),
+            as: SvgKeywordsResult.self
+        )
+    }
+
+    func renderSvgThumbnail(fileName: String? = nil, svgContent: String? = nil, width: Int = 64, height: Int = 64) async throws -> SvgThumbnailResult {
+        struct Params: Encodable {
+            let fileName: String?
+            let svgContent: String?
+            let width: Int
+            let height: Int
+        }
+        return try await call(
+            method: "renderSvgThumbnail",
+            params: Params(fileName: fileName, svgContent: svgContent, width: width, height: height),
+            as: SvgThumbnailResult.self
+        )
+    }
+
     private func call<P: Encodable, R: Decodable>(method: String, params: P, as type: R.Type) async throws -> R {
         requestCounter += 1
         let id = String(requestCounter)

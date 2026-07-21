@@ -58,7 +58,9 @@ static void PrintHelp()
           ping                               Print host/protocol version as JSON
 
         RPC methods (protocol 1.0): ping, generateParts, exportStl,
-          listModels, getModel, saveModel, deleteModel
+          listModels, getModel, saveModel, deleteModel,
+          listSvgFiles, readSvgContent, importSvgFile, deleteSvgFile,
+          getSvgKeywords, setSvgKeywords, renderSvgThumbnail
         See docs/HOST_PROTOCOL.md for the wire format.
         """);
 }

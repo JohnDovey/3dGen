@@ -9,6 +9,7 @@ struct ShapeInspectorView: View {
                 Text("Shape")
                     .font(.headline)
 
+                // Two rows so Custom SVG fits without crushing the segmented control
                 Picker("Type", selection: Binding(
                     get: { appModel.shapeType },
                     set: { appModel.shapeType = $0 }
@@ -17,7 +18,7 @@ struct ShapeInspectorView: View {
                         Text(option.description).tag(option)
                     }
                 }
-                .pickerStyle(.segmented)
+                .pickerStyle(.menu)
 
                 labeledSlider("Size (mm)", value: appModel.bindingShapeSize(), range: 5...500)
 
@@ -34,9 +35,17 @@ struct ShapeInspectorView: View {
                     ColorPicker("Border", selection: appModel.bindingBorderColor(), supportsOpacity: false)
                 }
 
+                if appModel.shapeType == .customSvg {
+                    customShapeSection
+                }
+
                 Divider()
 
                 TextLinesPanelView()
+
+                Divider()
+
+                SvgInsertsPanelView()
 
                 Divider()
 
@@ -60,6 +69,48 @@ struct ShapeInspectorView: View {
             .padding()
         }
         .background(.background)
+    }
+
+    private var customShapeSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Custom shape SVG")
+                .font(.subheadline.weight(.semibold))
+            HStack(spacing: 10) {
+                Group {
+                    if let data = appModel.customShapeThumbnail, let ns = NSImage(data: data) {
+                        Image(nsImage: ns)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                    } else {
+                        Image(systemName: "square.dashed")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(width: 40, height: 40)
+                .background(Color(nsColor: .controlBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(appModel.model.customShapeSourceFileName ?? "No SVG selected")
+                        .font(.caption)
+                        .lineLimit(1)
+                    HStack {
+                        Button("Choose…") {
+                            appModel.openSvgLibrary(for: .customShape)
+                        }
+                        .controlSize(.small)
+                        if appModel.model.customShapeSvgContent != nil {
+                            Button("Clear", role: .destructive) {
+                                appModel.clearCustomShape()
+                            }
+                            .controlSize(.small)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
     }
 
     private func labeledSlider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {

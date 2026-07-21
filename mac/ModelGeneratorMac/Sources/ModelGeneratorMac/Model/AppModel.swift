@@ -23,6 +23,19 @@ final class AppModel: ObservableObject {
     @Published var pendingDiscardAction: DiscardAction?
     @Published var modelSummaries: [ModelSummary] = []
 
+    // SVG library UI
+    @Published var showSvgLibrarySheet: Bool = false
+    @Published var svgLibraryPurpose: SvgLibraryPurpose = .insert
+    @Published var svgLibraryItems: [SvgLibraryItem] = []
+    @Published var svgLibraryQuery: String = ""
+    @Published var svgThumbnailCache: [String: Data] = [:]
+    @Published var customShapeThumbnail: Data?
+
+    enum SvgLibraryPurpose {
+        case insert
+        case customShape
+    }
+
     enum DiscardAction {
         case newDocument
         case openDocument
@@ -97,6 +110,170 @@ final class AppModel: ObservableObject {
     private func normalizeTextLineFonts() {
         for i in model.textLines.indices {
             model.textLines[i].fontName = FontCatalog.resolve(model.textLines[i].fontName)
+        }
+    }
+
+    // MARK: - SVG inserts
+
+    func removeSvgInsert(at index: Int) {
+        guard model.svgInserts.indices.contains(index) else { return }
+        noteEdit {
+            self.model.svgInserts.remove(at: index)
+            self.renumberSvgInserts()
+        }
+    }
+
+    func renumberSvgInserts() {
+        for i in model.svgInserts.indices {
+            model.svgInserts[i].lineNumber = i
+        }
+    }
+
+    func openSvgLibrary(for purpose: SvgLibraryPurpose) {
+        svgLibraryPurpose = purpose
+        svgLibraryQuery = ""
+        showSvgLibrarySheet = true
+        Task { await refreshSvgLibrary() }
+    }
+
+    func refreshSvgLibrary() async {
+        guard let client else { return }
+        do {
+            let result = try await client.listSvgFiles(query: svgLibraryQuery)
+            svgLibraryItems = result.files
+            // Prefetch missing thumbnails
+            for item in result.files where svgThumbnailCache[item.fileName] == nil {
+                Task {
+                    await loadSvgThumbnail(fileName: item.fileName)
+                }
+            }
+        } catch {
+            alertMessage = error.localizedDescription
+        }
+    }
+
+    func loadSvgThumbnail(fileName: String) async {
+        guard let client else { return }
+        do {
+            let thumb = try await client.renderSvgThumbnail(fileName: fileName, width: 64, height: 64)
+            svgThumbnailCache[fileName] = thumb.png
+        } catch {
+            // leave blank
+        }
+    }
+
+    func importSvgFilesFromPanel() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [UTType(filenameExtension: "svg")].compactMap { $0 }
+        panel.message = "Import SVG files into the library"
+        guard panel.runModal() == .OK else { return }
+        Task {
+            guard let client else { return }
+            for url in panel.urls {
+                do {
+                    _ = try await client.importSvgFile(path: url.path)
+                } catch {
+                    alertMessage = error.localizedDescription
+                }
+            }
+            await refreshSvgLibrary()
+        }
+    }
+
+    func deleteSvgLibraryFile(_ fileName: String) {
+        Task {
+            guard let client else { return }
+            do {
+                _ = try await client.deleteSvgFile(fileName: fileName)
+                svgThumbnailCache.removeValue(forKey: fileName)
+                await refreshSvgLibrary()
+            } catch {
+                alertMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func setSvgLibraryTags(fileName: String, tagsCSV: String) {
+        let keywords = tagsCSV
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        Task {
+            guard let client else { return }
+            do {
+                _ = try await client.setSvgKeywords(fileName: fileName, keywords: keywords)
+                await refreshSvgLibrary()
+            } catch {
+                alertMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func selectSvgFromLibrary(fileName: String) {
+        Task {
+            guard let client else { return }
+            do {
+                let content = try await client.readSvgContent(fileName: fileName)
+                switch svgLibraryPurpose {
+                case .insert:
+                    noteEdit {
+                        let insert = WireSvgInsert.fromLibrary(
+                            fileName: fileName,
+                            content: content.content,
+                            lineNumber: self.model.svgInserts.count
+                        )
+                        self.model.svgInserts.append(insert)
+                        self.renumberSvgInserts()
+                    }
+                case .customShape:
+                    noteEdit {
+                        self.model.shapeType = ShapeTypeOption.customSvg.rawValue
+                        self.model.customShapeSvgContent = content.content
+                        self.model.customShapeSourceFileName = fileName
+                    }
+                    await refreshCustomShapeThumbnail()
+                }
+                showSvgLibrarySheet = false
+            } catch {
+                alertMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func refreshCustomShapeThumbnail() async {
+        guard let content = model.customShapeSvgContent, !content.isEmpty, let client else {
+            customShapeThumbnail = nil
+            return
+        }
+        do {
+            let thumb = try await client.renderSvgThumbnail(svgContent: content, width: 48, height: 48)
+            customShapeThumbnail = thumb.png
+        } catch {
+            customShapeThumbnail = nil
+        }
+    }
+
+    func clearCustomShape() {
+        noteEdit {
+            self.model.customShapeSvgContent = nil
+            self.model.customShapeSourceFileName = nil
+            if self.model.shapeType == ShapeTypeOption.customSvg.rawValue {
+                self.model.shapeType = ShapeTypeOption.circle.rawValue
+            }
+        }
+        customShapeThumbnail = nil
+    }
+
+    /// Renders an SVG content thumbnail for insert editors (nil on failure).
+    func renderSvgContentThumbnail(_ content: String) async -> Data? {
+        guard let client else { return nil }
+        do {
+            let thumb = try await client.renderSvgThumbnail(svgContent: content, width: 48, height: 48)
+            return thumb.png
+        } catch {
+            return nil
         }
     }
 
@@ -309,6 +486,9 @@ final class AppModel: ObservableObject {
                 loaded.textLines[i].fontName = FontCatalog.resolve(loaded.textLines[i].fontName)
                 loaded.textLines[i].id = UUID()
             }
+            for i in loaded.svgInserts.indices {
+                loaded.svgInserts[i].id = UUID()
+            }
             if loaded.textLines.isEmpty {
                 loaded.textLines = [WireTextLine.blank(lineNumber: 0)]
             }
@@ -321,6 +501,11 @@ final class AppModel: ObservableObject {
             lastCommittedModel = model.deepCopy()
             isDirty = false
             refreshUndoFlags()
+            if model.shapeType == ShapeTypeOption.customSvg.rawValue {
+                await refreshCustomShapeThumbnail()
+            } else {
+                customShapeThumbnail = nil
+            }
             await regenerate()
             statusText = "Opened '\(model.name)'."
             statusIsError = false
@@ -460,6 +645,9 @@ final class AppModel: ObservableObject {
             isConnected = true
             hostVersion = ping.version
             statusText = "Host \(ping.version) ready (protocol \(ping.protocolVersion))"
+            if model.shapeType == ShapeTypeOption.customSvg.rawValue {
+                await refreshCustomShapeThumbnail()
+            }
             await regenerate()
         } catch {
             isConnected = false
@@ -540,6 +728,27 @@ extension AppModel {
                     line.fontSize = min(200, max(2, line.fontSize))
                     line.textHeight = min(50, max(0.2, line.textHeight))
                     self.model.textLines[index] = line
+                }
+            }
+        )
+    }
+
+    func svgInsertBinding(at index: Int) -> Binding<WireSvgInsert> {
+        Binding(
+            get: {
+                guard self.model.svgInserts.indices.contains(index) else {
+                    return WireSvgInsert()
+                }
+                return self.model.svgInserts[index]
+            },
+            set: { newValue in
+                self.noteEdit {
+                    guard self.model.svgInserts.indices.contains(index) else { return }
+                    var insert = newValue
+                    insert.lineNumber = index
+                    insert.scale = min(500, max(1, insert.scale))
+                    insert.embossHeight = min(50, max(0.2, insert.embossHeight))
+                    self.model.svgInserts[index] = insert
                 }
             }
         )

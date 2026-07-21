@@ -187,6 +187,13 @@
   dirty `*` title, discard prompts on New/Open/Quit, Open sheet with
   delete. Snapshot undo stack (500ms burst coalescing) on the client.
 
+- **Phase 5 / Mac SVG library + inserts + CustomSvg (done):** Host SVG library
+  RPC (list/search/import/delete/tags/thumbnail/read). Mac inspector: SVG
+  inserts panel (scale/emboss/color/position), library sheet with search and
+  tags, CustomSvg shape type with Choose… from the same library. SceneKit
+  already renders `svgMeshes`. Viewport drag-to-reposition deferred with
+  image inserts (Phase 6).
+
 Remaining ideas (not currently planned as a phase): richer validation feedback in dialogs; a
 configurable alpha-inclusion threshold (currently a hardcoded 50%) if the default proves wrong
 for some images in practice; the same off-center-artwork drag-jump class of bug likely also

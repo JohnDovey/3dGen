@@ -91,7 +91,9 @@ struct WireTextLine: Codable, Equatable, Identifiable {
     }
 }
 
-struct WireSvgInsert: Codable, Equatable {
+struct WireSvgInsert: Codable, Equatable, Identifiable {
+    var id: UUID = UUID()
+
     var lineNumber: Int = 0
     var sourceFileName: String? = nil
     var svgContent: String = ""
@@ -103,6 +105,59 @@ struct WireSvgInsert: Codable, Equatable {
     var positionZ: Float = 0
     var rotationZ: Float = 0
     var colorArgb: Int = -29_696
+
+    enum CodingKeys: String, CodingKey {
+        case lineNumber, sourceFileName, svgContent, scale, embossHeight
+        case positionMode, positionX, positionY, positionZ, rotationZ, colorArgb
+    }
+
+    var positionModeOption: PositionModeOption {
+        get { PositionModeOption(rawValue: positionMode) ?? .autoCenter }
+        set { positionMode = newValue.rawValue }
+    }
+
+    static func fromLibrary(fileName: String, content: String, lineNumber: Int) -> WireSvgInsert {
+        var insert = WireSvgInsert()
+        insert.lineNumber = lineNumber
+        insert.sourceFileName = fileName
+        insert.svgContent = content
+        insert.scale = 40
+        insert.embossHeight = 5
+        insert.positionMode = PositionModeOption.autoCenter.rawValue
+        insert.colorArgb = -29_696
+        return insert
+    }
+}
+
+struct SvgLibraryItem: Codable, Identifiable, Equatable {
+    var fileName: String
+    var keywords: [String] = []
+
+    var id: String { fileName }
+}
+
+struct SvgLibraryListResult: Codable {
+    var files: [SvgLibraryItem]
+}
+
+struct SvgImportResult: Codable {
+    var fileName: String
+}
+
+struct SvgContentResult: Codable {
+    var fileName: String
+    var content: String
+}
+
+struct SvgThumbnailResult: Codable {
+    var png: Data
+    var width: Int
+    var height: Int
+}
+
+struct SvgKeywordsResult: Codable {
+    var fileName: String
+    var keywords: [String]
 }
 
 struct WireImageInsert: Codable, Equatable {
@@ -169,7 +224,7 @@ enum ShapeTypeOption: Int, CaseIterable, Identifiable, CustomStringConvertible {
     case triangle = 1
     case shield = 2
     case rectangle = 3
-    // CustomSvg = 4 deferred to later phase
+    case customSvg = 4
 
     var id: Int { rawValue }
 
@@ -179,6 +234,7 @@ enum ShapeTypeOption: Int, CaseIterable, Identifiable, CustomStringConvertible {
         case .triangle: return "Triangle"
         case .shield: return "Shield"
         case .rectangle: return "Rectangle"
+        case .customSvg: return "Custom SVG"
         }
     }
 }

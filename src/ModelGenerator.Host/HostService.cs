@@ -14,12 +14,18 @@ public sealed class HostService
 {
     private readonly IModelOrchestrator _orchestrator;
     private readonly IModelRepository _repository;
+    private readonly ISvgLibraryService _svgLibrary;
     private readonly string _appDataDir;
 
-    public HostService(IModelOrchestrator orchestrator, IModelRepository repository, string appDataDir)
+    public HostService(
+        IModelOrchestrator orchestrator,
+        IModelRepository repository,
+        ISvgLibraryService svgLibrary,
+        string appDataDir)
     {
         _orchestrator = orchestrator;
         _repository = repository;
+        _svgLibrary = svgLibrary;
         _appDataDir = appDataDir;
     }
 
@@ -58,8 +64,9 @@ public sealed class HostService
         var connectionFactory = new ConnectionFactory(dbPath);
         new DatabaseInitializer(connectionFactory).Initialize();
         var repository = new SqliteModelRepository(connectionFactory);
+        var svgLibrary = new SvgLibraryService(Path.Combine(appDataDir, "SvgLibrary"));
 
-        return new HostService(orchestrator, repository, appDataDir);
+        return new HostService(orchestrator, repository, svgLibrary, appDataDir);
     }
 
     public PingResult Ping() => new()
@@ -181,6 +188,99 @@ public sealed class HostService
         return new DeleteModelResult { Id = id, Deleted = true };
     }
 
+
+    public SvgLibraryListResult ListSvgFiles(string? query = null)
+    {
+        var names = string.IsNullOrWhiteSpace(query)
+            ? _svgLibrary.ListSvgFiles()
+            : _svgLibrary.SearchFiles(query);
+        return new SvgLibraryListResult
+        {
+            Files = names.Select(n => new SvgLibraryItemDto
+            {
+                FileName = n,
+                Keywords = _svgLibrary.GetKeywords(n).ToList()
+            }).ToList()
+        };
+    }
+
+    public SvgContentResult ReadSvgContent(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            throw new HostInvalidParamsException("fileName is required.");
+        }
+        return new SvgContentResult
+        {
+            FileName = fileName,
+            Content = _svgLibrary.ReadSvgContent(fileName)
+        };
+    }
+
+    public SvgImportResult ImportSvgFile(string sourcePath)
+    {
+        if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath))
+        {
+            throw new HostInvalidParamsException($"SVG file not found: {sourcePath}");
+        }
+        string name = _svgLibrary.ImportFile(sourcePath);
+        return new SvgImportResult { FileName = name };
+    }
+
+    public SvgImportResult DeleteSvgFile(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            throw new HostInvalidParamsException("fileName is required.");
+        }
+        _svgLibrary.DeleteFile(fileName);
+        return new SvgImportResult { FileName = fileName };
+    }
+
+    public SvgKeywordsResult GetSvgKeywords(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            throw new HostInvalidParamsException("fileName is required.");
+        }
+        return new SvgKeywordsResult
+        {
+            FileName = fileName,
+            Keywords = _svgLibrary.GetKeywords(fileName).ToList()
+        };
+    }
+
+    public SvgKeywordsResult SetSvgKeywords(string fileName, IReadOnlyList<string> keywords)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            throw new HostInvalidParamsException("fileName is required.");
+        }
+        _svgLibrary.SetKeywords(fileName, keywords ?? Array.Empty<string>());
+        return new SvgKeywordsResult
+        {
+            FileName = fileName,
+            Keywords = _svgLibrary.GetKeywords(fileName).ToList()
+        };
+    }
+
+    public SvgThumbnailResult RenderSvgThumbnail(string? fileName, string? svgContent, int width = 64, int height = 64)
+    {
+        width = Math.Clamp(width, 8, 512);
+        height = Math.Clamp(height, 8, 512);
+        string content = svgContent ?? "";
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                throw new HostInvalidParamsException("fileName or svgContent is required.");
+            }
+            content = _svgLibrary.ReadSvgContent(fileName);
+        }
+        byte[] png = _svgLibrary.RenderThumbnail(content, width, height);
+        return new SvgThumbnailResult { Png = png, Width = width, Height = height };
+    }
+
     public object Dispatch(string method, JsonElement? paramsElement)
     {
         return method.ToLowerInvariant() switch
@@ -196,6 +296,26 @@ public sealed class HostService
                 RequireModel(paramsElement),
                 OptionalBool(paramsElement, true, "saveMesh", "cacheMesh")),
             "deletemodel" or "delete_model" => DeleteModel(RequireInt(paramsElement, "id", "modelId")),
+            "listsvgfiles" or "list_svg_files" or "searchsvgfiles" or "search_svg_files"
+                => ListSvgFiles(OptionalString(paramsElement, null, "query", "q")),
+            "readsvgcontent" or "read_svg_content"
+                => ReadSvgContent(RequireString(paramsElement, "fileName", "name")),
+            "importsvgfile" or "import_svg_file"
+                => ImportSvgFile(RequireString(paramsElement, "path", "sourcePath", "filePath")),
+            "deletesvgfile" or "delete_svg_file"
+                => DeleteSvgFile(RequireString(paramsElement, "fileName", "name")),
+            "getsvgkeywords" or "get_svg_keywords"
+                => GetSvgKeywords(RequireString(paramsElement, "fileName", "name")),
+            "setsvgkeywords" or "set_svg_keywords"
+                => SetSvgKeywords(
+                    RequireString(paramsElement, "fileName", "name"),
+                    RequireStringArray(paramsElement, "keywords", "tags")),
+            "rendersvgthumbnail" or "render_svg_thumbnail"
+                => RenderSvgThumbnail(
+                    OptionalString(paramsElement, null, "fileName", "name"),
+                    OptionalString(paramsElement, null, "svgContent", "content"),
+                    OptionalInt(paramsElement, 64, "width", "w"),
+                    OptionalInt(paramsElement, 64, "height", "h")),
             _ => throw new HostMethodNotFoundException(method)
         };
     }
@@ -295,6 +415,78 @@ public sealed class HostService
         }
 
         throw new HostInvalidParamsException($"One of [{string.Join(", ", names)}] is required.");
+    }
+
+
+    private static string? OptionalString(JsonElement? paramsElement, string? defaultValue, params string[] names)
+    {
+        if (paramsElement is null || paramsElement.Value.ValueKind != JsonValueKind.Object)
+        {
+            return defaultValue;
+        }
+        foreach (var name in names)
+        {
+            if (TryGetPropertyIgnoreCase(paramsElement.Value, name, out var el)
+                && el.ValueKind == JsonValueKind.String)
+            {
+                return el.GetString();
+            }
+        }
+        return defaultValue;
+    }
+
+    private static int OptionalInt(JsonElement? paramsElement, int defaultValue, params string[] names)
+    {
+        if (paramsElement is null || paramsElement.Value.ValueKind != JsonValueKind.Object)
+        {
+            return defaultValue;
+        }
+        foreach (var name in names)
+        {
+            if (TryGetPropertyIgnoreCase(paramsElement.Value, name, out var el))
+            {
+                if (el.ValueKind == JsonValueKind.Number && el.TryGetInt32(out int n))
+                {
+                    return n;
+                }
+                if (el.ValueKind == JsonValueKind.String && int.TryParse(el.GetString(), out int parsed))
+                {
+                    return parsed;
+                }
+            }
+        }
+        return defaultValue;
+    }
+
+    private static IReadOnlyList<string> RequireStringArray(JsonElement? paramsElement, params string[] names)
+    {
+        if (paramsElement is null || paramsElement.Value.ValueKind != JsonValueKind.Object)
+        {
+            return Array.Empty<string>();
+        }
+        foreach (var name in names)
+        {
+            if (!TryGetPropertyIgnoreCase(paramsElement.Value, name, out var el))
+            {
+                continue;
+            }
+            if (el.ValueKind == JsonValueKind.Array)
+            {
+                return el.EnumerateArray()
+                    .Where(x => x.ValueKind == JsonValueKind.String)
+                    .Select(x => x.GetString()!)
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .ToList();
+            }
+            if (el.ValueKind == JsonValueKind.String)
+            {
+                // Comma-separated fallback
+                return (el.GetString() ?? "")
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .ToList();
+            }
+        }
+        return Array.Empty<string>();
     }
 
     private static bool TryGetPropertyIgnoreCase(JsonElement obj, string name, out JsonElement value)

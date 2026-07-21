@@ -123,3 +123,39 @@ public sealed class DeleteModelResult
     public int Id { get; set; }
     public bool Deleted { get; set; }
 }
+
+public sealed class SvgLibraryItemDto
+{
+    public string FileName { get; set; } = string.Empty;
+    public List<string> Keywords { get; set; } = new();
+}
+
+public sealed class SvgLibraryListResult
+{
+    public List<SvgLibraryItemDto> Files { get; set; } = new();
+}
+
+public sealed class SvgImportResult
+{
+    public string FileName { get; set; } = string.Empty;
+}
+
+public sealed class SvgContentResult
+{
+    public string FileName { get; set; } = string.Empty;
+    public string Content { get; set; } = string.Empty;
+}
+
+public sealed class SvgThumbnailResult
+{
+    /// <summary>PNG bytes (JSON as base64).</summary>
+    public byte[] Png { get; set; } = [];
+    public int Width { get; set; }
+    public int Height { get; set; }
+}
+
+public sealed class SvgKeywordsResult
+{
+    public string FileName { get; set; } = string.Empty;
+    public List<string> Keywords { get; set; } = new();
+}

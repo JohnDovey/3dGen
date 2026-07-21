@@ -44,6 +44,10 @@ struct ContentView: View {
             OpenModelSheet()
                 .environmentObject(appModel)
         }
+        .sheet(isPresented: $appModel.showSvgLibrarySheet) {
+            SvgLibrarySheet()
+                .environmentObject(appModel)
+        }
         .sheet(isPresented: $appModel.showSaveNameSheet) {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Save Model")

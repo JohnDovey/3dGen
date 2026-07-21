@@ -132,6 +132,20 @@ Persists parameters to SQLite (same DB as WinForms:
 
 Returns `{ "id": 1, "deleted": true }`.
 
+### SVG library
+
+| Method | Params | Result |
+|--------|--------|--------|
+| `listSvgFiles` / `searchSvgFiles` | optional `query` | `{ "files": [ { "fileName", "keywords":[] } ] }` |
+| `readSvgContent` | `fileName` | `{ "fileName", "content" }` |
+| `importSvgFile` | `path` (absolute path on host machine) | `{ "fileName" }` |
+| `deleteSvgFile` | `fileName` | `{ "fileName" }` |
+| `getSvgKeywords` | `fileName` | `{ "fileName", "keywords" }` |
+| `setSvgKeywords` | `fileName`, `keywords` (string array or comma list) | `{ "fileName", "keywords" }` |
+| `renderSvgThumbnail` | `fileName` **or** `svgContent`, optional `width`/`height` | `{ "png": "<base64>", "width", "height" }` |
+
+Library files live under `{appData}/SvgLibrary/` (same as WinForms).
+
 ## Example model JSON
 
 ```json
