@@ -93,3 +93,33 @@ public sealed class ExportStlResult
     public int VertexCount { get; set; }
     public int TriangleCount { get; set; }
 }
+
+public sealed class ModelSummaryDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public int ShapeType { get; set; }
+    public DateTime ModifiedDate { get; set; }
+}
+
+public sealed class ListModelsResult
+{
+    public List<ModelSummaryDto> Models { get; set; } = new();
+}
+
+public sealed class GetModelResult
+{
+    public Model Model { get; set; } = new();
+}
+
+public sealed class SaveModelResult
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+}
+
+public sealed class DeleteModelResult
+{
+    public int Id { get; set; }
+    public bool Deleted { get; set; }
+}

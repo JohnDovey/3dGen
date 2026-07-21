@@ -20,9 +20,6 @@ struct ContentView: View {
         .onAppear {
             appModel.startIfNeeded()
         }
-        .onDisappear {
-            // Window close is not app quit; host stays up for multi-window later.
-        }
         .alert("Error", isPresented: Binding(
             get: { appModel.alertMessage != nil },
             set: { if !$0 { appModel.alertMessage = nil } }
@@ -30,6 +27,41 @@ struct ContentView: View {
             Button("OK", role: .cancel) { appModel.alertMessage = nil }
         } message: {
             Text(appModel.alertMessage ?? "")
+        }
+        .confirmationDialog(
+            "Save changes to '\(appModel.model.name)' first?",
+            isPresented: Binding(
+                get: { appModel.pendingDiscardAction != nil },
+                set: { if !$0 { appModel.confirmDiscardCancel() } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Save") { appModel.confirmDiscardSave() }
+            Button("Don't Save", role: .destructive) { appModel.confirmDiscardDontSave() }
+            Button("Cancel", role: .cancel) { appModel.confirmDiscardCancel() }
+        }
+        .sheet(isPresented: $appModel.showOpenSheet) {
+            OpenModelSheet()
+                .environmentObject(appModel)
+        }
+        .sheet(isPresented: $appModel.showSaveNameSheet) {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Save Model")
+                    .font(.headline)
+                TextField("Model name", text: $appModel.saveNameDraft)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { appModel.confirmSaveName() }
+                HStack {
+                    Spacer()
+                    Button("Cancel") { appModel.cancelSaveName() }
+                        .keyboardShortcut(.cancelAction)
+                    Button("Save") { appModel.confirmSaveName() }
+                        .keyboardShortcut(.defaultAction)
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+            .padding()
+            .frame(width: 360)
         }
     }
 }

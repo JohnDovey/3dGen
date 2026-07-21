@@ -3,7 +3,8 @@ import Foundation
 // MARK: - Wire model (matches ModelGenerator.Core JSON / Host protocol)
 
 struct WireModel: Codable, Equatable {
-    var name: String = ""
+    var id: Int = 0
+    var name: String = "Untitled"
     var shapeType: Int = 0
     var shapeSize: Float = 60
     var shapeHeight: Float = 40
@@ -17,6 +18,55 @@ struct WireModel: Codable, Equatable {
     var textLines: [WireTextLine] = []
     var svgInserts: [WireSvgInsert] = []
     var imageInserts: [WireImageInsert] = []
+
+    /// Deep copy via JSON (used for undo snapshots).
+    func deepCopy() -> WireModel {
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+        guard let data = try? encoder.encode(self),
+              let copy = try? decoder.decode(WireModel.self, from: data)
+        else {
+            return self
+        }
+        return copy
+    }
+
+    static func blankDocument() -> WireModel {
+        var m = WireModel()
+        m.id = 0
+        m.name = "Untitled"
+        m.textLines = [WireTextLine.blank(lineNumber: 0)]
+        return m
+    }
+}
+
+struct ModelSummary: Codable, Identifiable, Equatable {
+    var id: Int
+    var name: String
+    var shapeType: Int
+    var modifiedDate: Date?
+
+    var shapeLabel: String {
+        ShapeTypeOption(rawValue: shapeType)?.description ?? "Shape \(shapeType)"
+    }
+}
+
+struct ListModelsResult: Codable {
+    var models: [ModelSummary]
+}
+
+struct GetModelResult: Codable {
+    var model: WireModel
+}
+
+struct SaveModelResult: Codable {
+    var id: Int
+    var name: String
+}
+
+struct DeleteModelResult: Codable {
+    var id: Int
+    var deleted: Bool
 }
 
 struct WireTextLine: Codable, Equatable, Identifiable {

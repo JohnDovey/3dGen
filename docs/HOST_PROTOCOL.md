@@ -97,6 +97,41 @@ Meshes use **flat float arrays** for vertices/normals (`[x,y,z, x,y,z, ...]`).
 Generates the merged mesh and writes a **binary STL**. Returns path, byte size,
 vertex/triangle counts.
 
+### `listModels`
+
+No required params. Returns summaries for the Open dialog:
+
+```json
+{"models":[{"id":1,"name":"Badge","shapeType":0,"modifiedDate":"2026-07-21T12:00:00Z"}]}
+```
+
+### `getModel`
+
+```json
+{"id":"4","method":"getModel","params":{"id":1}}
+```
+
+Returns `{ "model": { /* full Model including text/svg/image inserts */ } }`.
+
+### `saveModel`
+
+```json
+{"id":"5","method":"saveModel","params":{"model":{ /* Model with name, id 0 = insert */ },"saveMesh":true}}
+```
+
+Persists parameters to SQLite (same DB as WinForms:
+`~/Library/Application Support/ModelGenerator/models.sqlite` on macOS) and, when
+`saveMesh` is true (default), caches the generated mesh. Returns
+`{ "id": 1, "name": "Badge" }`.
+
+### `deleteModel`
+
+```json
+{"id":"6","method":"deleteModel","params":{"id":1}}
+```
+
+Returns `{ "id": 1, "deleted": true }`.
+
 ## Example model JSON
 
 ```json

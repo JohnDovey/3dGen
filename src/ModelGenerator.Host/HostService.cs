@@ -2,6 +2,8 @@ using System.Reflection;
 using System.Text.Json;
 using ModelGenerator.Core.Models;
 using ModelGenerator.Core.Services;
+using ModelGenerator.Data.Database;
+using ModelGenerator.Data.Repository;
 using ModelGenerator.Host.Protocol;
 
 namespace ModelGenerator.Host;
@@ -11,14 +13,39 @@ namespace ModelGenerator.Host;
 public sealed class HostService
 {
     private readonly IModelOrchestrator _orchestrator;
+    private readonly IModelRepository _repository;
+    private readonly string _appDataDir;
 
-    public HostService(IModelOrchestrator orchestrator)
+    public HostService(IModelOrchestrator orchestrator, IModelRepository repository, string appDataDir)
     {
         _orchestrator = orchestrator;
+        _repository = repository;
+        _appDataDir = appDataDir;
     }
 
-    public static HostService CreateDefault()
+    public string AppDataDir => _appDataDir;
+
+    /// <summary>Production layout under LocalApplicationData/ModelGenerator (same as WinForms).</summary>
+    public static HostService CreateDefault() => Create(DefaultAppDataDir());
+
+    /// <summary>Isolated instance for tests (temp directory + fresh SQLite).</summary>
+    public static HostService CreateForTesting(string appDataDir) => Create(appDataDir);
+
+    public static string DefaultAppDataDir()
     {
+        string dir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ModelGenerator");
+        Directory.CreateDirectory(dir);
+        return dir;
+    }
+
+    private static HostService Create(string appDataDir)
+    {
+        Directory.CreateDirectory(appDataDir);
+        Directory.CreateDirectory(Path.Combine(appDataDir, "SvgLibrary"));
+        Directory.CreateDirectory(Path.Combine(appDataDir, "ImageLibrary"));
+
         var orchestrator = new ModelOrchestrator(
             new ShapeGenerator(),
             new TextMeshConverter(),
@@ -26,7 +53,13 @@ public sealed class HostService
             new ImageMeshConverter(),
             new TextPositioner(),
             new MeshComposer());
-        return new HostService(orchestrator);
+
+        string dbPath = Path.Combine(appDataDir, "models.sqlite");
+        var connectionFactory = new ConnectionFactory(dbPath);
+        new DatabaseInitializer(connectionFactory).Initialize();
+        var repository = new SqliteModelRepository(connectionFactory);
+
+        return new HostService(orchestrator, repository, appDataDir);
     }
 
     public PingResult Ping() => new()
@@ -80,7 +113,6 @@ public sealed class HostService
         return result;
     }
 
-    /// <summary>Builds the merged mesh from the model and writes a binary STL to <paramref name="path"/>.</summary>
     public ExportStlResult ExportStl(Model model, string path)
     {
         var mesh = _orchestrator.GenerateModel(model);
@@ -101,6 +133,54 @@ public sealed class HostService
         };
     }
 
+    public ListModelsResult ListModels()
+    {
+        var models = _repository.ListModelsAsync().GetAwaiter().GetResult();
+        return new ListModelsResult
+        {
+            Models = models.Select(m => new ModelSummaryDto
+            {
+                Id = m.Id,
+                Name = m.Name,
+                ShapeType = (int)m.ShapeType,
+                ModifiedDate = m.ModifiedDate
+            }).ToList()
+        };
+    }
+
+    public GetModelResult GetModel(int id)
+    {
+        var model = _repository.GetModelByIdAsync(id).GetAwaiter().GetResult()
+            ?? throw new HostInvalidParamsException($"Model id {id} was not found.");
+        return new GetModelResult { Model = model };
+    }
+
+    /// <summary>Inserts or updates the model and optionally caches the generated mesh (like WinForms Save).</summary>
+    public SaveModelResult SaveModel(Model model, bool saveMesh = true)
+    {
+        if (string.IsNullOrWhiteSpace(model.Name))
+        {
+            throw new HostInvalidParamsException("model.name is required.");
+        }
+
+        int id = _repository.SaveModelAsync(model).GetAwaiter().GetResult();
+        model.Id = id;
+
+        if (saveMesh)
+        {
+            var mesh = _orchestrator.GenerateModel(model);
+            _repository.SaveMeshAsync(id, mesh).GetAwaiter().GetResult();
+        }
+
+        return new SaveModelResult { Id = id, Name = model.Name };
+    }
+
+    public DeleteModelResult DeleteModel(int id)
+    {
+        _repository.DeleteModelAsync(id).GetAwaiter().GetResult();
+        return new DeleteModelResult { Id = id, Deleted = true };
+    }
+
     public object Dispatch(string method, JsonElement? paramsElement)
     {
         return method.ToLowerInvariant() switch
@@ -110,6 +190,12 @@ public sealed class HostService
             "exportstl" or "export_stl" => ExportStl(
                 RequireModel(paramsElement),
                 RequireString(paramsElement, "path", "filePath", "stlPath")),
+            "listmodels" or "list_models" => ListModels(),
+            "getmodel" or "get_model" => GetModel(RequireInt(paramsElement, "id", "modelId")),
+            "savemodel" or "save_model" => SaveModel(
+                RequireModel(paramsElement),
+                OptionalBool(paramsElement, true, "saveMesh", "cacheMesh")),
+            "deletemodel" or "delete_model" => DeleteModel(RequireInt(paramsElement, "id", "modelId")),
             _ => throw new HostMethodNotFoundException(method)
         };
     }
@@ -123,13 +209,12 @@ public sealed class HostService
 
         var root = paramsElement.Value;
         JsonElement modelElement;
-        if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("model", out modelElement))
+        if (root.ValueKind == JsonValueKind.Object && TryGetPropertyIgnoreCase(root, "model", out modelElement))
         {
             // ok
         }
         else if (root.ValueKind == JsonValueKind.Object && LooksLikeModel(root))
         {
-            // Allow bare model object as params for convenience in one-shot files.
             modelElement = root;
         }
         else
@@ -143,7 +228,51 @@ public sealed class HostService
     }
 
     private static bool LooksLikeModel(JsonElement obj) =>
-        obj.TryGetProperty("shapeType", out _) || obj.TryGetProperty("ShapeType", out _);
+        TryGetPropertyIgnoreCase(obj, "shapeType", out _) || TryGetPropertyIgnoreCase(obj, "name", out _);
+
+    private static int RequireInt(JsonElement? paramsElement, params string[] names)
+    {
+        if (paramsElement is null || paramsElement.Value.ValueKind != JsonValueKind.Object)
+        {
+            throw new HostInvalidParamsException($"One of [{string.Join(", ", names)}] is required.");
+        }
+
+        foreach (var name in names)
+        {
+            if (TryGetPropertyIgnoreCase(paramsElement.Value, name, out var el))
+            {
+                if (el.ValueKind == JsonValueKind.Number && el.TryGetInt32(out int n))
+                {
+                    return n;
+                }
+                if (el.ValueKind == JsonValueKind.String && int.TryParse(el.GetString(), out int parsed))
+                {
+                    return parsed;
+                }
+            }
+        }
+
+        throw new HostInvalidParamsException($"One of [{string.Join(", ", names)}] is required.");
+    }
+
+    private static bool OptionalBool(JsonElement? paramsElement, bool defaultValue, params string[] names)
+    {
+        if (paramsElement is null || paramsElement.Value.ValueKind != JsonValueKind.Object)
+        {
+            return defaultValue;
+        }
+
+        foreach (var name in names)
+        {
+            if (TryGetPropertyIgnoreCase(paramsElement.Value, name, out var el))
+            {
+                if (el.ValueKind is JsonValueKind.True) return true;
+                if (el.ValueKind is JsonValueKind.False) return false;
+            }
+        }
+
+        return defaultValue;
+    }
 
     private static string RequireString(JsonElement? paramsElement, params string[] names)
     {
@@ -154,7 +283,8 @@ public sealed class HostService
 
         foreach (var name in names)
         {
-            if (paramsElement.Value.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.String)
+            if (TryGetPropertyIgnoreCase(paramsElement.Value, name, out var el)
+                && el.ValueKind == JsonValueKind.String)
             {
                 string? s = el.GetString();
                 if (!string.IsNullOrWhiteSpace(s))
@@ -162,23 +292,29 @@ public sealed class HostService
                     return s;
                 }
             }
-
-            // Case-insensitive fallback
-            foreach (var prop in paramsElement.Value.EnumerateObject())
-            {
-                if (string.Equals(prop.Name, name, StringComparison.OrdinalIgnoreCase)
-                    && prop.Value.ValueKind == JsonValueKind.String)
-                {
-                    string? s = prop.Value.GetString();
-                    if (!string.IsNullOrWhiteSpace(s))
-                    {
-                        return s;
-                    }
-                }
-            }
         }
 
         throw new HostInvalidParamsException($"One of [{string.Join(", ", names)}] is required.");
+    }
+
+    private static bool TryGetPropertyIgnoreCase(JsonElement obj, string name, out JsonElement value)
+    {
+        if (obj.TryGetProperty(name, out value))
+        {
+            return true;
+        }
+
+        foreach (var prop in obj.EnumerateObject())
+        {
+            if (string.Equals(prop.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                value = prop.Value;
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
     }
 }
 

@@ -27,32 +27,11 @@ struct TextLinesPanelView: View {
             ForEach(Array(appModel.model.textLines.enumerated()), id: \.element.id) { index, _ in
                 TextLineEditorView(
                     index: index,
-                    line: binding(for: index),
+                    line: appModel.textLineBinding(at: index),
                     canRemove: true
                 )
             }
         }
-    }
-
-    private func binding(for index: Int) -> Binding<WireTextLine> {
-        Binding(
-            get: {
-                guard appModel.model.textLines.indices.contains(index) else {
-                    return WireTextLine.blank()
-                }
-                return appModel.model.textLines[index]
-            },
-            set: { newValue in
-                guard appModel.model.textLines.indices.contains(index) else { return }
-                var line = newValue
-                line.lineNumber = index
-                line.fontName = FontCatalog.resolve(line.fontName)
-                line.fontSize = min(200, max(2, line.fontSize))
-                line.textHeight = min(50, max(0.2, line.textHeight))
-                appModel.model.textLines[index] = line
-                appModel.scheduleRegenerate()
-            }
-        )
     }
 }
 

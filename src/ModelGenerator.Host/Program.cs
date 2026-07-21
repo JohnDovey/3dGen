@@ -57,7 +57,8 @@ static void PrintHelp()
                                              One-shot: write GenerateParts result JSON
           ping                               Print host/protocol version as JSON
 
-        RPC methods (protocol 1.0): ping, generateParts, exportStl
+        RPC methods (protocol 1.0): ping, generateParts, exportStl,
+          listModels, getModel, saveModel, deleteModel
         See docs/HOST_PROTOCOL.md for the wire format.
         """);
 }

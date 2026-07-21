@@ -7,9 +7,31 @@ using Xunit;
 
 namespace ModelGenerator.Tests;
 
-public class HostServiceTests
+public class HostServiceTests : IDisposable
 {
-    private readonly HostService _service = HostService.CreateDefault();
+    private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"host-test-{Guid.NewGuid():N}");
+    private readonly HostService _service;
+
+    public HostServiceTests()
+    {
+        Directory.CreateDirectory(_tempDir);
+        _service = HostService.CreateForTesting(_tempDir);
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            if (Directory.Exists(_tempDir))
+            {
+                Directory.Delete(_tempDir, recursive: true);
+            }
+        }
+        catch
+        {
+            // best-effort
+        }
+    }
 
     [Fact]
     public void Ping_ReturnsOkAndProtocolVersion()
@@ -149,5 +171,54 @@ public class HostServiceTests
         Assert.Equal(model.ShapeSize, loaded.ShapeSize);
         Assert.Single(loaded.TextLines);
         Assert.Equal("HI", loaded.TextLines[0].Content);
+    }
+
+    [Fact]
+    public void SaveGetListDeleteModel_RoundTrips()
+    {
+        var model = new Model
+        {
+            Name = "Host Save Test",
+            ShapeType = ShapeType.Circle,
+            ShapeSize = 55,
+            TextLines =
+            {
+                new TextLine { LineNumber = 0, Content = "OK", FontName = "Arial", FontSize = 12 }
+            }
+        };
+
+        var saved = _service.SaveModel(model, saveMesh: true);
+        Assert.True(saved.Id > 0);
+        Assert.Equal("Host Save Test", saved.Name);
+
+        var listed = _service.ListModels();
+        Assert.Contains(listed.Models, m => m.Id == saved.Id && m.Name == "Host Save Test");
+
+        var loaded = _service.GetModel(saved.Id);
+        Assert.Equal(saved.Id, loaded.Model.Id);
+        Assert.Equal("Host Save Test", loaded.Model.Name);
+        Assert.Equal(55, loaded.Model.ShapeSize);
+        Assert.Single(loaded.Model.TextLines);
+        Assert.Equal("OK", loaded.Model.TextLines[0].Content);
+
+        var deleted = _service.DeleteModel(saved.Id);
+        Assert.True(deleted.Deleted);
+        Assert.DoesNotContain(_service.ListModels().Models, m => m.Id == saved.Id);
+    }
+
+    [Fact]
+    public void JsonRpcSession_SaveModel_ViaDispatch()
+    {
+        var session = new JsonRpcSession(_service, Stream.Null, Stream.Null);
+        string request = """
+            {"id":"s","method":"saveModel","params":{"model":{"name":"RpcSave","shapeType":0,"shapeSize":40,"shapeThickness":10,"borderThickness":5,"borderHeight":5,"textLines":[],"svgInserts":[],"imageInserts":[]},"saveMesh":false}}
+            """;
+
+        var response = session.HandleLine(request.Trim());
+        Assert.Null(response.Error);
+        string resultJson = JsonSerializer.Serialize(response.Result, HostProtocol.JsonOptions);
+        using var doc = JsonDocument.Parse(resultJson);
+        Assert.True(doc.RootElement.GetProperty("id").GetInt32() > 0);
+        Assert.Equal("RpcSave", doc.RootElement.GetProperty("name").GetString());
     }
 }

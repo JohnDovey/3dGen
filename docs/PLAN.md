@@ -181,6 +181,12 @@
   SceneKit already renders per-line `textMeshes`. SVG/image/CustomSvg still
   later.
 
+- **Phase 4 / Mac persistence + undo (done):** Host gains `listModels` /
+  `getModel` / `saveModel` / `deleteModel` against the same SQLite app-data
+  DB as WinForms. Mac menus: New/Open/Save/Save As, Undo/Redo (⌘Z/⇧⌘Z),
+  dirty `*` title, discard prompts on New/Open/Quit, Open sheet with
+  delete. Snapshot undo stack (500ms burst coalescing) on the client.
+
 Remaining ideas (not currently planned as a phase): richer validation feedback in dialogs; a
 configurable alpha-inclusion threshold (currently a hardcoded 50%) if the default proves wrong
 for some images in practice; the same off-center-artwork drag-jump class of bug likely also

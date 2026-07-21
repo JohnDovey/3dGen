@@ -25,6 +25,29 @@ actor HostClient {
         return try await call(method: "exportStl", params: Params(model: model, path: path), as: ExportStlResult.self)
     }
 
+    func listModels() async throws -> ListModelsResult {
+        try await call(method: "listModels", params: [:] as [String: String], as: ListModelsResult.self)
+    }
+
+    func getModel(id: Int) async throws -> WireModel {
+        struct Params: Encodable { let id: Int }
+        let result: GetModelResult = try await call(method: "getModel", params: Params(id: id), as: GetModelResult.self)
+        return result.model
+    }
+
+    func saveModel(_ model: WireModel, saveMesh: Bool = true) async throws -> SaveModelResult {
+        struct Params: Encodable {
+            let model: WireModel
+            let saveMesh: Bool
+        }
+        return try await call(method: "saveModel", params: Params(model: model, saveMesh: saveMesh), as: SaveModelResult.self)
+    }
+
+    func deleteModel(id: Int) async throws -> DeleteModelResult {
+        struct Params: Encodable { let id: Int }
+        return try await call(method: "deleteModel", params: Params(id: id), as: DeleteModelResult.self)
+    }
+
     private func call<P: Encodable, R: Decodable>(method: String, params: P, as type: R.Type) async throws -> R {
         requestCounter += 1
         let id = String(requestCounter)
@@ -40,6 +63,7 @@ actor HostClient {
 
         let responseData = try await send(requestData)
         let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
         let envelope = try decoder.decode(RpcResponseEnvelope.self, from: responseData)
 
         if let error = envelope.error {
