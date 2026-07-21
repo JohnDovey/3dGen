@@ -47,6 +47,7 @@ public class MainForm : Form
     // Open/close-the-window can offer to save first instead of silently discarding work.
     private bool _isDirty;
     private bool _isClosingConfirmed;
+    private bool _closePromptPending;
 
     public MainForm(IModelOrchestrator orchestrator, IModelRepository repository, ISvgLibraryService svgLibrary, IImageLibraryService imageLibrary, IProjectBundleService projectBundleService)
     {
@@ -359,18 +360,35 @@ public class MainForm : Form
         e.Cancel = true;
         base.OnFormClosing(e);
 
+        // A modal MessageBox pumps its own nested message loop, so a rapid double
+        // click/Alt+F4-repeat on the X button before the first prompt appears can re-enter
+        // OnFormClosing and queue a second BeginInvoke before _isClosingConfirmed/_isDirty
+        // change — without this guard that shows two stacked confirmation dialogs.
+        if (_closePromptPending)
+        {
+            return;
+        }
+        _closePromptPending = true;
+
         // Defer the Yes/No/Cancel prompt until after FormClosing returns with Cancel=true.
         BeginInvoke(new Action(async () =>
         {
-            if (!_isDirty || _isClosingConfirmed || IsDisposed)
+            try
             {
-                return;
-            }
+                if (!_isDirty || _isClosingConfirmed || IsDisposed)
+                {
+                    return;
+                }
 
-            if (await ConfirmDiscardUnsavedChangesAsync())
+                if (await ConfirmDiscardUnsavedChangesAsync())
+                {
+                    _isClosingConfirmed = true;
+                    Close();
+                }
+            }
+            finally
             {
-                _isClosingConfirmed = true;
-                Close();
+                _closePromptPending = false;
             }
         }));
     }
