@@ -1,5 +1,6 @@
 using ModelGenerator.Core.Models;
 using ModelGenerator.Core.Services;
+using ModelGenerator.Core.Utilities;
 using ModelGenerator.Data.Repository;
 using ModelGenerator.UI.Controls;
 using CoreMesh = ModelGenerator.Core.Models.Mesh;
@@ -24,6 +25,24 @@ public class MainForm : Form
     private CoreMesh? _currentMesh;
     private int? _currentModelId;
     private string _currentModelName = "Untitled";
+
+    // Undo/redo: full-Model snapshots rather than reversible commands, since edits already mutate
+    // controls in place. Rapid-fire bursts (viewport drag mouse-moves, TextBox keystrokes) are
+    // coalesced into a single undo step via a short idle debounce, so one Ctrl+Z undoes "that
+    // drag" or "that word", not one mouse-move/keystroke at a time.
+    private const int UndoDebounceMilliseconds = 500;
+    private readonly UndoManager<Model> _undoManager = new();
+    private readonly System.Windows.Forms.Timer _undoDebounceTimer = new() { Interval = UndoDebounceMilliseconds };
+    private Model? _lastCommittedModel;
+    private bool _isRestoringState;
+    private bool _undoBurstPending;
+    private ToolStripMenuItem _undoMenuItem = null!;
+    private ToolStripMenuItem _redoMenuItem = null!;
+
+    // Unsaved-changes tracking: true whenever the model differs from what's on disk, so New/
+    // Open/close-the-window can offer to save first instead of silently discarding work.
+    private bool _isDirty;
+    private bool _isClosingConfirmed;
 
     public MainForm(IModelOrchestrator orchestrator, IModelRepository repository, ISvgLibraryService svgLibrary, IImageLibraryService imageLibrary)
     {
@@ -95,10 +114,17 @@ public class MainForm : Form
         Controls.Add(leftPanel);
         Controls.Add(menuStrip);
 
-        _shapeSelector.ValuesChanged += (_, _) => RegeneratePreview();
-        _textLinesPanel.LinesChanged += (_, _) => RegeneratePreview();
-        _svgInsertsPanel.InsertsChanged += (_, _) => RegeneratePreview();
-        _imageInsertsPanel.InsertsChanged += (_, _) => RegeneratePreview();
+        _undoDebounceTimer.Tick += (_, _) =>
+        {
+            _undoDebounceTimer.Stop();
+            _undoBurstPending = false;
+            _lastCommittedModel = BuildModelFromControls();
+        };
+
+        _shapeSelector.ValuesChanged += (_, _) => OnEditableStateChanged();
+        _textLinesPanel.LinesChanged += (_, _) => OnEditableStateChanged();
+        _svgInsertsPanel.InsertsChanged += (_, _) => OnEditableStateChanged();
+        _imageInsertsPanel.InsertsChanged += (_, _) => OnEditableStateChanged();
         _exportButton.Click += (_, _) => ExportStl();
         _viewportHost.ItemDragged += (kind, index, x, y, z) =>
         {
@@ -117,14 +143,23 @@ public class MainForm : Form
         };
 
         _textLinesPanel.AddLine();
+        // The initial blank text line fires LinesChanged like any other edit would, but a
+        // freshly launched "Untitled" document shouldn't already read as modified — clear the
+        // dirty flag/undo burst state this one time, after it's had its say, rather than
+        // wrapping the AddLine call itself in RunGuardedFromUndoTracking (which would also skip
+        // seeding _lastCommittedModel further down).
+        ResetUndoBurstState();
+        _isDirty = false;
         UpdateTitle();
         RegeneratePreview();
+        _lastCommittedModel = BuildModelFromControls();
+        UpdateUndoRedoMenuState();
     }
 
     private MenuStrip BuildMenuStrip()
     {
         var fileMenu = new ToolStripMenuItem("&File");
-        fileMenu.DropDownItems.Add("&New", null, (_, _) => NewModel());
+        fileMenu.DropDownItems.Add("&New", null, async (_, _) => await NewModelAsync());
         fileMenu.DropDownItems.Add("&Open...", null, async (_, _) => await OpenModelAsync());
         fileMenu.DropDownItems.Add("&Save", null, async (_, _) => await SaveModelAsync(forceNewName: false));
         fileMenu.DropDownItems.Add("Save &As...", null, async (_, _) => await SaveModelAsync(forceNewName: true));
@@ -133,6 +168,20 @@ public class MainForm : Form
         fileMenu.DropDownItems.Add(new ToolStripSeparator());
         fileMenu.DropDownItems.Add("E&xit", null, (_, _) => Close());
 
+        var editMenu = new ToolStripMenuItem("&Edit");
+        _undoMenuItem = new ToolStripMenuItem("&Undo", null, (_, _) => Undo())
+        {
+            ShortcutKeys = Keys.Control | Keys.Z,
+            Enabled = false
+        };
+        _redoMenuItem = new ToolStripMenuItem("&Redo", null, (_, _) => Redo())
+        {
+            ShortcutKeys = Keys.Control | Keys.Y,
+            Enabled = false
+        };
+        editMenu.DropDownItems.Add(_undoMenuItem);
+        editMenu.DropDownItems.Add(_redoMenuItem);
+
         var helpMenu = new ToolStripMenuItem("&Help");
         helpMenu.DropDownItems.Add("&How to Use", null, (_, _) => ShowHelp());
         helpMenu.DropDownItems.Add(new ToolStripSeparator());
@@ -140,6 +189,7 @@ public class MainForm : Form
 
         var menuStrip = new MenuStrip();
         menuStrip.Items.Add(fileMenu);
+        menuStrip.Items.Add(editMenu);
         menuStrip.Items.Add(helpMenu);
         return menuStrip;
     }
@@ -172,21 +222,42 @@ public class MainForm : Form
             MessageBoxIcon.Information);
     }
 
-    private void NewModel()
+    private async Task NewModelAsync()
     {
+        if (!await ConfirmDiscardUnsavedChangesAsync())
+        {
+            return;
+        }
+
         _currentModelId = null;
         _currentModelName = "Untitled";
-        _shapeSelector.LoadFrom(new Model());
-        _textLinesPanel.Clear();
-        _textLinesPanel.AddLine();
-        _svgInsertsPanel.Clear();
-        _imageInsertsPanel.Clear();
+
+        RunGuardedFromUndoTracking(() =>
+        {
+            _shapeSelector.LoadFrom(new Model());
+            _textLinesPanel.Clear();
+            _textLinesPanel.AddLine();
+            _svgInsertsPanel.Clear();
+            _imageInsertsPanel.Clear();
+        });
+
+        // A different document has no relationship to the previous one's undo history.
+        _undoManager.Clear();
+        _isDirty = false;
         UpdateTitle();
         RegeneratePreview();
+        ResetUndoBurstState();
+        _lastCommittedModel = BuildModelFromControls();
+        UpdateUndoRedoMenuState();
     }
 
     private async Task OpenModelAsync()
     {
+        if (!await ConfirmDiscardUnsavedChangesAsync())
+        {
+            return;
+        }
+
         using var dialog = new OpenModelDialog(_repository);
         if (dialog.ShowDialog(this) != DialogResult.OK || dialog.SelectedModelId is not int id)
         {
@@ -203,15 +274,174 @@ public class MainForm : Form
 
         _currentModelId = model.Id;
         _currentModelName = model.Name;
-        _shapeSelector.LoadFrom(model);
-        _textLinesPanel.LoadLines(model.TextLines);
-        _svgInsertsPanel.LoadInserts(model.SvgInserts);
-        _imageInsertsPanel.LoadInserts(model.ImageInserts);
+
+        RunGuardedFromUndoTracking(() =>
+        {
+            _shapeSelector.LoadFrom(model);
+            _textLinesPanel.LoadLines(model.TextLines);
+            _svgInsertsPanel.LoadInserts(model.SvgInserts);
+            _imageInsertsPanel.LoadInserts(model.ImageInserts);
+        });
+
+        // A different document has no relationship to the previous one's undo history.
+        _undoManager.Clear();
+        _isDirty = false;
         UpdateTitle();
+        RegeneratePreview();
+        ResetUndoBurstState();
+        _lastCommittedModel = BuildModelFromControls();
+        UpdateUndoRedoMenuState();
+    }
+
+    /// <summary>Prompts to save if there are unsaved changes, before a destructive action
+    /// (New/Open/closing the window) would otherwise silently discard them. Returns true if it's
+    /// safe to proceed — either nothing was dirty, the user chose to discard, or the user chose
+    /// to save and the save succeeded.</summary>
+    private async Task<bool> ConfirmDiscardUnsavedChangesAsync()
+    {
+        if (!_isDirty)
+        {
+            return true;
+        }
+
+        var result = MessageBox.Show(this,
+            $"Save changes to '{_currentModelName}' first?",
+            "3D Model Generator",
+            MessageBoxButtons.YesNoCancel,
+            MessageBoxIcon.Warning);
+
+        return result switch
+        {
+            DialogResult.Yes => await SaveModelAsync(forceNewName: false),
+            DialogResult.No => true,
+            _ => false
+        };
+    }
+
+    protected override async void OnFormClosing(FormClosingEventArgs e)
+    {
+        if (_isClosingConfirmed || !_isDirty)
+        {
+            base.OnFormClosing(e);
+            return;
+        }
+
+        // Cancel this close, ask, and re-issue Close() once confirmed — OnFormClosing itself
+        // can't await synchronously since FormClosingEventArgs.Cancel must be set before
+        // returning control to the framework's closing sequence.
+        e.Cancel = true;
+        if (await ConfirmDiscardUnsavedChangesAsync())
+        {
+            _isClosingConfirmed = true;
+            Close();
+        }
+    }
+
+    private void Undo()
+    {
+        if (!_undoManager.CanUndo)
+        {
+            return;
+        }
+
+        var current = BuildModelFromControls();
+        var previous = _undoManager.Undo(current);
+        RestoreModelIntoControls(previous);
+    }
+
+    private void Redo()
+    {
+        if (!_undoManager.CanRedo)
+        {
+            return;
+        }
+
+        var current = BuildModelFromControls();
+        var next = _undoManager.Redo(current);
+        RestoreModelIntoControls(next);
+    }
+
+    /// <summary>Loads a model snapshot back into the controls for Undo/Redo — unlike New/Open,
+    /// this doesn't touch _currentModelId/_currentModelName/title (undo/redo rewinds the content
+    /// of the model you're editing, it doesn't change which saved model you're attached to) or
+    /// the undo/redo stacks themselves.</summary>
+    private void RestoreModelIntoControls(Model model)
+    {
+        RunGuardedFromUndoTracking(() =>
+        {
+            _shapeSelector.LoadFrom(model);
+            _textLinesPanel.LoadLines(model.TextLines);
+            _svgInsertsPanel.LoadInserts(model.SvgInserts);
+            _imageInsertsPanel.LoadInserts(model.ImageInserts);
+        });
+
+        _isDirty = true;
+        UpdateTitle();
+        RegeneratePreview();
+        ResetUndoBurstState();
+        _lastCommittedModel = model;
+        UpdateUndoRedoMenuState();
+    }
+
+    /// <summary>Runs a block of control-mutating code (New/Open/Undo/Redo, all of which call
+    /// LoadFrom/LoadLines/LoadInserts on the panels) without those panels' own Changed/
+    /// LinesChanged/InsertsChanged events being treated as user edits worth recording on the undo
+    /// stack.</summary>
+    private void RunGuardedFromUndoTracking(Action action)
+    {
+        _isRestoringState = true;
+        try
+        {
+            action();
+        }
+        finally
+        {
+            _isRestoringState = false;
+        }
+    }
+
+    private void ResetUndoBurstState()
+    {
+        _undoDebounceTimer.Stop();
+        _undoBurstPending = false;
+    }
+
+    private void UpdateUndoRedoMenuState()
+    {
+        _undoMenuItem.Enabled = _undoManager.CanUndo;
+        _redoMenuItem.Enabled = _undoManager.CanRedo;
+    }
+
+    /// <summary>Every control that edits the model routes its change event through here instead
+    /// of calling RegeneratePreview directly — records an undo checkpoint for the FIRST change in
+    /// a burst (see UndoDebounceMilliseconds), then always regenerates the preview.</summary>
+    private void OnEditableStateChanged()
+    {
+        if (!_isRestoringState)
+        {
+            if (!_undoBurstPending)
+            {
+                _undoBurstPending = true;
+                if (_lastCommittedModel is not null)
+                {
+                    _undoManager.RecordSnapshot(_lastCommittedModel);
+                    UpdateUndoRedoMenuState();
+                }
+            }
+            _undoDebounceTimer.Stop();
+            _undoDebounceTimer.Start();
+
+            _isDirty = true;
+            UpdateTitle();
+        }
+
         RegeneratePreview();
     }
 
-    private async Task SaveModelAsync(bool forceNewName)
+    /// <summary>Returns true if the model was actually saved — false if the user cancelled the
+    /// name prompt or the save threw, so callers (e.g. the close-confirmation flow) know whether
+    /// it's safe to proceed with whatever they were about to do.</summary>
+    private async Task<bool> SaveModelAsync(bool forceNewName)
     {
         string name = _currentModelName;
         if (forceNewName || _currentModelId is null)
@@ -219,7 +449,7 @@ public class MainForm : Form
             using var dialog = new TextInputDialog("Save Model", "Model name:", name);
             if (dialog.ShowDialog(this) != DialogResult.OK || string.IsNullOrWhiteSpace(dialog.InputText))
             {
-                return;
+                return false;
             }
             name = dialog.InputText.Trim();
         }
@@ -238,14 +468,17 @@ public class MainForm : Form
 
             _currentModelId = id;
             _currentModelName = name;
+            _isDirty = false;
             UpdateTitle();
             _statusLabel.Text = $"Saved '{name}'.";
             _statusLabel.ForeColor = System.Drawing.Color.Black;
+            return true;
         }
         catch (Exception ex)
         {
             MessageBox.Show(this, $"Could not save the model:\n{ex.Message}", "Save Model",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return false;
         }
     }
 
@@ -261,7 +494,7 @@ public class MainForm : Form
 
     private static string AppVersion => Application.ProductVersion;
 
-    private void UpdateTitle() => Text = $"3D Model Generator v{AppVersion} — {_currentModelName}";
+    private void UpdateTitle() => Text = $"3D Model Generator v{AppVersion} — {_currentModelName}{(_isDirty ? " *" : "")}";
 
     private void RegeneratePreview()
     {
