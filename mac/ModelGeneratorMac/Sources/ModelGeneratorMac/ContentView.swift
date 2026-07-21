@@ -48,6 +48,10 @@ struct ContentView: View {
             SvgLibrarySheet()
                 .environmentObject(appModel)
         }
+        .sheet(isPresented: $appModel.showImageLibrarySheet) {
+            ImageLibrarySheet()
+                .environmentObject(appModel)
+        }
         .sheet(isPresented: $appModel.showSaveNameSheet) {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Save Model")

@@ -160,13 +160,15 @@ struct SvgKeywordsResult: Codable {
     var keywords: [String]
 }
 
-struct WireImageInsert: Codable, Equatable {
+struct WireImageInsert: Codable, Equatable, Identifiable {
+    var id: UUID = UUID()
+
     var lineNumber: Int = 0
     var sourceFileName: String? = nil
     var imageData: Data = Data()
     var scale: Float = 40
     var reliefHeight: Float = 3
-    var detail: Int = 1
+    var detail: Int = 1 // ImageDetail.Medium
     var invert: Bool = false
     var positionMode: Int = 0
     var positionX: Float = 0
@@ -174,6 +176,86 @@ struct WireImageInsert: Codable, Equatable {
     var positionZ: Float = 0
     var rotationZ: Float = 0
     var colorArgb: Int = -29_696
+
+    enum CodingKeys: String, CodingKey {
+        case lineNumber, sourceFileName, imageData, scale, reliefHeight, detail, invert
+        case positionMode, positionX, positionY, positionZ, rotationZ, colorArgb
+    }
+
+    var positionModeOption: PositionModeOption {
+        get { PositionModeOption(rawValue: positionMode) ?? .autoCenter }
+        set { positionMode = newValue.rawValue }
+    }
+
+    var detailOption: ImageDetailOption {
+        get { ImageDetailOption(rawValue: detail) ?? .medium }
+        set { detail = newValue.rawValue }
+    }
+
+    static func fromLibrary(fileName: String, data: Data, lineNumber: Int) -> WireImageInsert {
+        var insert = WireImageInsert()
+        insert.lineNumber = lineNumber
+        insert.sourceFileName = fileName
+        insert.imageData = data
+        insert.scale = 40
+        insert.reliefHeight = 3
+        insert.detail = ImageDetailOption.medium.rawValue
+        insert.positionMode = PositionModeOption.autoCenter.rawValue
+        insert.colorArgb = -29_696
+        return insert
+    }
+}
+
+enum ImageDetailOption: Int, CaseIterable, Identifiable, CustomStringConvertible {
+    case low = 0
+    case medium = 1
+    case high = 2
+
+    var id: Int { rawValue }
+
+    var description: String {
+        switch self {
+        case .low: return "Low"
+        case .medium: return "Medium"
+        case .high: return "High"
+        }
+    }
+}
+
+struct ImageLibraryItem: Codable, Identifiable, Equatable {
+    var fileName: String
+    var keywords: [String] = []
+    var id: String { fileName }
+}
+
+struct ImageLibraryListResult: Codable {
+    var files: [ImageLibraryItem]
+}
+
+struct ImageImportResult: Codable {
+    var fileName: String
+}
+
+struct ImageBytesResult: Codable {
+    var fileName: String
+    var data: Data
+}
+
+struct ImageThumbnailResult: Codable {
+    var png: Data
+    var width: Int
+    var height: Int
+}
+
+struct ImageKeywordsResult: Codable {
+    var fileName: String
+    var keywords: [String]
+}
+
+enum DraggableKind: String {
+    case text
+    case svg
+    case image
 }
 
 // MARK: - generateParts result

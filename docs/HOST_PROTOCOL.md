@@ -146,6 +146,19 @@ Returns `{ "id": 1, "deleted": true }`.
 
 Library files live under `{appData}/SvgLibrary/` (same as WinForms).
 
+### Image library
+
+| Method | Params | Result |
+|--------|--------|--------|
+| `listImageFiles` / `searchImageFiles` | optional `query` | `{ "files": [ { "fileName", "keywords":[] } ] }` |
+| `readImageBytes` | `fileName` | `{ "fileName", "data": "<base64>" }` |
+| `importImageFile` | `path` | `{ "fileName" }` |
+| `deleteImageFile` | `fileName` | `{ "fileName" }` |
+| `getImageKeywords` / `setImageKeywords` | as SVG | keywords |
+| `renderImageThumbnail` | `fileName` **or** `imageData`, optional size | `{ "png": "<base64>", "width", "height" }` |
+
+Library files live under `{appData}/ImageLibrary/`.
+
 ## Example model JSON
 
 ```json

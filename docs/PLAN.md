@@ -194,6 +194,12 @@
   already renders `svgMeshes`. Viewport drag-to-reposition deferred with
   image inserts (Phase 6).
 
+- **Phase 6 / Mac image bas-relief + drag/select (done):** Host image library
+  RPC (list/import/delete/tags/thumbnail/read). Mac image inserts panel
+  (scale, relief, detail L/M/H, invert, position). SceneKit: click select
+  (yellow wire box), drag text/SVG/image onto shape top plane → Manual
+  X/Y/Z (camera orbit disabled while dragging).
+
 Remaining ideas (not currently planned as a phase): richer validation feedback in dialogs; a
 configurable alpha-inclusion threshold (currently a hardcoded 50%) if the default proves wrong
 for some images in practice; the same off-center-artwork drag-jump class of bug likely also

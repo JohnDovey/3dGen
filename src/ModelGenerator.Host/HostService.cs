@@ -15,17 +15,20 @@ public sealed class HostService
     private readonly IModelOrchestrator _orchestrator;
     private readonly IModelRepository _repository;
     private readonly ISvgLibraryService _svgLibrary;
+    private readonly IImageLibraryService _imageLibrary;
     private readonly string _appDataDir;
 
     public HostService(
         IModelOrchestrator orchestrator,
         IModelRepository repository,
         ISvgLibraryService svgLibrary,
+        IImageLibraryService imageLibrary,
         string appDataDir)
     {
         _orchestrator = orchestrator;
         _repository = repository;
         _svgLibrary = svgLibrary;
+        _imageLibrary = imageLibrary;
         _appDataDir = appDataDir;
     }
 
@@ -65,8 +68,9 @@ public sealed class HostService
         new DatabaseInitializer(connectionFactory).Initialize();
         var repository = new SqliteModelRepository(connectionFactory);
         var svgLibrary = new SvgLibraryService(Path.Combine(appDataDir, "SvgLibrary"));
+        var imageLibrary = new ImageLibraryService(Path.Combine(appDataDir, "ImageLibrary"));
 
-        return new HostService(orchestrator, repository, svgLibrary, appDataDir);
+        return new HostService(orchestrator, repository, svgLibrary, imageLibrary, appDataDir);
     }
 
     public PingResult Ping() => new()
@@ -281,6 +285,86 @@ public sealed class HostService
         return new SvgThumbnailResult { Png = png, Width = width, Height = height };
     }
 
+
+    public ImageLibraryListResult ListImageFiles(string? query = null)
+    {
+        var names = string.IsNullOrWhiteSpace(query)
+            ? _imageLibrary.ListImageFiles()
+            : _imageLibrary.SearchFiles(query);
+        return new ImageLibraryListResult
+        {
+            Files = names.Select(n => new ImageLibraryItemDto
+            {
+                FileName = n,
+                Keywords = _imageLibrary.GetKeywords(n).ToList()
+            }).ToList()
+        };
+    }
+
+    public ImageBytesResult ReadImageBytes(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+            throw new HostInvalidParamsException("fileName is required.");
+        return new ImageBytesResult
+        {
+            FileName = fileName,
+            Data = _imageLibrary.ReadImageBytes(fileName)
+        };
+    }
+
+    public ImageImportResult ImportImageFile(string sourcePath)
+    {
+        if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath))
+            throw new HostInvalidParamsException($"Image file not found: {sourcePath}");
+        return new ImageImportResult { FileName = _imageLibrary.ImportFile(sourcePath) };
+    }
+
+    public ImageImportResult DeleteImageFile(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+            throw new HostInvalidParamsException("fileName is required.");
+        _imageLibrary.DeleteFile(fileName);
+        return new ImageImportResult { FileName = fileName };
+    }
+
+    public ImageKeywordsResult GetImageKeywords(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+            throw new HostInvalidParamsException("fileName is required.");
+        return new ImageKeywordsResult
+        {
+            FileName = fileName,
+            Keywords = _imageLibrary.GetKeywords(fileName).ToList()
+        };
+    }
+
+    public ImageKeywordsResult SetImageKeywords(string fileName, IReadOnlyList<string> keywords)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+            throw new HostInvalidParamsException("fileName is required.");
+        _imageLibrary.SetKeywords(fileName, keywords ?? Array.Empty<string>());
+        return new ImageKeywordsResult
+        {
+            FileName = fileName,
+            Keywords = _imageLibrary.GetKeywords(fileName).ToList()
+        };
+    }
+
+    public ImageThumbnailResult RenderImageThumbnail(string? fileName, byte[]? imageData, int width = 64, int height = 64)
+    {
+        width = Math.Clamp(width, 8, 512);
+        height = Math.Clamp(height, 8, 512);
+        byte[] data = imageData ?? [];
+        if (data.Length == 0)
+        {
+            if (string.IsNullOrWhiteSpace(fileName))
+                throw new HostInvalidParamsException("fileName or imageData is required.");
+            data = _imageLibrary.ReadImageBytes(fileName);
+        }
+        byte[] png = _imageLibrary.RenderThumbnail(data, width, height);
+        return new ImageThumbnailResult { Png = png, Width = width, Height = height };
+    }
+
     public object Dispatch(string method, JsonElement? paramsElement)
     {
         return method.ToLowerInvariant() switch
@@ -314,6 +398,26 @@ public sealed class HostService
                 => RenderSvgThumbnail(
                     OptionalString(paramsElement, null, "fileName", "name"),
                     OptionalString(paramsElement, null, "svgContent", "content"),
+                    OptionalInt(paramsElement, 64, "width", "w"),
+                    OptionalInt(paramsElement, 64, "height", "h")),
+            "listimagefiles" or "list_image_files" or "searchimagefiles" or "search_image_files"
+                => ListImageFiles(OptionalString(paramsElement, null, "query", "q")),
+            "readimagebytes" or "read_image_bytes"
+                => ReadImageBytes(RequireString(paramsElement, "fileName", "name")),
+            "importimagefile" or "import_image_file"
+                => ImportImageFile(RequireString(paramsElement, "path", "sourcePath", "filePath")),
+            "deleteimagefile" or "delete_image_file"
+                => DeleteImageFile(RequireString(paramsElement, "fileName", "name")),
+            "getimagekeywords" or "get_image_keywords"
+                => GetImageKeywords(RequireString(paramsElement, "fileName", "name")),
+            "setimagekeywords" or "set_image_keywords"
+                => SetImageKeywords(
+                    RequireString(paramsElement, "fileName", "name"),
+                    RequireStringArray(paramsElement, "keywords", "tags")),
+            "renderimagethumbnail" or "render_image_thumbnail"
+                => RenderImageThumbnail(
+                    OptionalString(paramsElement, null, "fileName", "name"),
+                    OptionalBytes(paramsElement, "imageData", "data"),
                     OptionalInt(paramsElement, 64, "width", "w"),
                     OptionalInt(paramsElement, 64, "height", "h")),
             _ => throw new HostMethodNotFoundException(method)
@@ -487,6 +591,36 @@ public sealed class HostService
             }
         }
         return Array.Empty<string>();
+    }
+
+    private static byte[]? OptionalBytes(JsonElement? paramsElement, params string[] names)
+    {
+        if (paramsElement is null || paramsElement.Value.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        foreach (var name in names)
+        {
+            if (!TryGetPropertyIgnoreCase(paramsElement.Value, name, out var el))
+            {
+                continue;
+            }
+
+            if (el.ValueKind == JsonValueKind.String)
+            {
+                try
+                {
+                    return el.GetBytesFromBase64();
+                }
+                catch (Exception)
+                {
+                    return null;
+                }
+            }
+        }
+
+        return null;
     }
 
     private static bool TryGetPropertyIgnoreCase(JsonElement obj, string name, out JsonElement value)

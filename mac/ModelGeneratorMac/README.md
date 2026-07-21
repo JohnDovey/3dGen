@@ -33,13 +33,14 @@ swift run --package-path mac/ModelGeneratorMac
 
 First launch may take a while while `dotnet run` builds the host.
 
-## What works (through Phase 5)
+## What works (through Phase 6)
 
 - Left inspector: shape type (circle/triangle/shield/rectangle/**Custom SVG**), size, thickness, border, colors
 - **Text lines:** add/remove; content, system fonts, size, emboss, color, AutoCenter/Manual/Relative + X/Y/Z/Rot
 - **SVG inserts:** library browser (search, tags, import, delete, thumbnails), insert params, live preview
-- **CustomSvg** base shape from the same library
-- Live SceneKit preview (top-down camera, orbit) including text + SVG meshes
+- **Image bas-reliefs:** image library (PNG/JPG), scale/relief/detail/invert/position
+- **CustomSvg** base shape from the SVG library
+- SceneKit preview: orbit camera; **click** to select (yellow box); **drag** text/SVG/images to reposition
 - Status bar with vertex/triangle counts or errors
 - **File:** New / Open / Save / Save As (same SQLite DB as Windows under Application Support)
 - **Edit:** Undo / Redo (⌘Z / ⇧⌘Z), dirty `*` in title, discard prompts
@@ -47,6 +48,4 @@ First launch may take a while while `dotnet run` builds the host.
 
 ## Not yet (later phases)
 
-- Image bas-relief inserts + image library
-- Drag-to-reposition, selection outline
-- Packaged `.app` with embedded host binary
+- Packaged `.app` with embedded host binary, Help/About, notarization

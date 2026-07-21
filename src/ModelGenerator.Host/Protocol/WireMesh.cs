@@ -159,3 +159,39 @@ public sealed class SvgKeywordsResult
     public string FileName { get; set; } = string.Empty;
     public List<string> Keywords { get; set; } = new();
 }
+
+public sealed class ImageLibraryItemDto
+{
+    public string FileName { get; set; } = string.Empty;
+    public List<string> Keywords { get; set; } = new();
+}
+
+public sealed class ImageLibraryListResult
+{
+    public List<ImageLibraryItemDto> Files { get; set; } = new();
+}
+
+public sealed class ImageImportResult
+{
+    public string FileName { get; set; } = string.Empty;
+}
+
+public sealed class ImageBytesResult
+{
+    public string FileName { get; set; } = string.Empty;
+    public byte[] Data { get; set; } = [];
+}
+
+public sealed class ImageThumbnailResult
+{
+    public byte[] Png { get; set; } = [];
+    public int Width { get; set; }
+    public int Height { get; set; }
+}
+
+public sealed class ImageKeywordsResult
+{
+    public string FileName { get; set; } = string.Empty;
+    public List<string> Keywords { get; set; } = new();
+}
+

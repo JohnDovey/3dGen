@@ -31,6 +31,16 @@ final class AppModel: ObservableObject {
     @Published var svgThumbnailCache: [String: Data] = [:]
     @Published var customShapeThumbnail: Data?
 
+    // Image library UI
+    @Published var showImageLibrarySheet: Bool = false
+    @Published var imageLibraryItems: [ImageLibraryItem] = []
+    @Published var imageLibraryQuery: String = ""
+    @Published var imageThumbnailCache: [String: Data] = [:]
+
+    /// Viewport selection (nil = none).
+    @Published var selectedKind: DraggableKind?
+    @Published var selectedIndex: Int?
+
     enum SvgLibraryPurpose {
         case insert
         case customShape
@@ -277,6 +287,170 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: - Image inserts
+
+    func removeImageInsert(at index: Int) {
+        guard model.imageInserts.indices.contains(index) else { return }
+        noteEdit {
+            self.model.imageInserts.remove(at: index)
+            self.renumberImageInserts()
+        }
+    }
+
+    func renumberImageInserts() {
+        for i in model.imageInserts.indices {
+            model.imageInserts[i].lineNumber = i
+        }
+    }
+
+    func openImageLibrary() {
+        imageLibraryQuery = ""
+        showImageLibrarySheet = true
+        Task { await refreshImageLibrary() }
+    }
+
+    func refreshImageLibrary() async {
+        guard let client else { return }
+        do {
+            let result = try await client.listImageFiles(query: imageLibraryQuery)
+            imageLibraryItems = result.files
+            for item in result.files where imageThumbnailCache[item.fileName] == nil {
+                Task { await loadImageThumbnail(fileName: item.fileName) }
+            }
+        } catch {
+            alertMessage = error.localizedDescription
+        }
+    }
+
+    func loadImageThumbnail(fileName: String) async {
+        guard let client else { return }
+        do {
+            let thumb = try await client.renderImageThumbnail(fileName: fileName, width: 64, height: 64)
+            imageThumbnailCache[fileName] = thumb.png
+        } catch {
+            // blank
+        }
+    }
+
+    func importImageFilesFromPanel() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        var types: [UTType] = []
+        for ext in ["png", "jpg", "jpeg"] {
+            if let t = UTType(filenameExtension: ext) { types.append(t) }
+        }
+        panel.allowedContentTypes = types
+        panel.message = "Import PNG/JPG files into the image library"
+        guard panel.runModal() == .OK else { return }
+        Task {
+            guard let client else { return }
+            for url in panel.urls {
+                do {
+                    _ = try await client.importImageFile(path: url.path)
+                } catch {
+                    alertMessage = error.localizedDescription
+                }
+            }
+            await refreshImageLibrary()
+        }
+    }
+
+    func deleteImageLibraryFile(_ fileName: String) {
+        Task {
+            guard let client else { return }
+            do {
+                _ = try await client.deleteImageFile(fileName: fileName)
+                imageThumbnailCache.removeValue(forKey: fileName)
+                await refreshImageLibrary()
+            } catch {
+                alertMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func setImageLibraryTags(fileName: String, tagsCSV: String) {
+        let keywords = tagsCSV
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        Task {
+            guard let client else { return }
+            do {
+                _ = try await client.setImageKeywords(fileName: fileName, keywords: keywords)
+                await refreshImageLibrary()
+            } catch {
+                alertMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func selectImageFromLibrary(fileName: String) {
+        Task {
+            guard let client else { return }
+            do {
+                let bytes = try await client.readImageBytes(fileName: fileName)
+                noteEdit {
+                    let insert = WireImageInsert.fromLibrary(
+                        fileName: fileName,
+                        data: bytes.data,
+                        lineNumber: self.model.imageInserts.count
+                    )
+                    self.model.imageInserts.append(insert)
+                    self.renumberImageInserts()
+                }
+                showImageLibrarySheet = false
+            } catch {
+                alertMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func renderImageDataThumbnail(_ data: Data) async -> Data? {
+        guard let client, !data.isEmpty else { return nil }
+        do {
+            let thumb = try await client.renderImageThumbnail(imageData: data, width: 48, height: 48)
+            return thumb.png
+        } catch {
+            return nil
+        }
+    }
+
+    // MARK: - Viewport drag / selection
+
+    func setSelection(kind: DraggableKind?, index: Int?) {
+        selectedKind = kind
+        selectedIndex = index
+    }
+
+    /// Drag moved an item onto the shape top plane — switch to Manual and set X/Y/Z.
+    func applyItemDrag(kind: DraggableKind, index: Int, x: Float, y: Float, z: Float) {
+        noteEdit {
+            switch kind {
+            case .text:
+                guard self.model.textLines.indices.contains(index) else { return }
+                self.model.textLines[index].positionMode = PositionModeOption.manual.rawValue
+                self.model.textLines[index].positionX = x
+                self.model.textLines[index].positionY = y
+                self.model.textLines[index].positionZ = z
+            case .svg:
+                guard self.model.svgInserts.indices.contains(index) else { return }
+                self.model.svgInserts[index].positionMode = PositionModeOption.manual.rawValue
+                self.model.svgInserts[index].positionX = x
+                self.model.svgInserts[index].positionY = y
+                self.model.svgInserts[index].positionZ = z
+            case .image:
+                guard self.model.imageInserts.indices.contains(index) else { return }
+                self.model.imageInserts[index].positionMode = PositionModeOption.manual.rawValue
+                self.model.imageInserts[index].positionX = x
+                self.model.imageInserts[index].positionY = y
+                self.model.imageInserts[index].positionZ = z
+            }
+        }
+        selectedKind = kind
+        selectedIndex = index
+    }
+
     func shutdown() {
         regenerateTask?.cancel()
         undoCommitTask?.cancel()
@@ -488,6 +662,9 @@ final class AppModel: ObservableObject {
             }
             for i in loaded.svgInserts.indices {
                 loaded.svgInserts[i].id = UUID()
+            }
+            for i in loaded.imageInserts.indices {
+                loaded.imageInserts[i].id = UUID()
             }
             if loaded.textLines.isEmpty {
                 loaded.textLines = [WireTextLine.blank(lineNumber: 0)]
@@ -749,6 +926,27 @@ extension AppModel {
                     insert.scale = min(500, max(1, insert.scale))
                     insert.embossHeight = min(50, max(0.2, insert.embossHeight))
                     self.model.svgInserts[index] = insert
+                }
+            }
+        )
+    }
+
+    func imageInsertBinding(at index: Int) -> Binding<WireImageInsert> {
+        Binding(
+            get: {
+                guard self.model.imageInserts.indices.contains(index) else {
+                    return WireImageInsert()
+                }
+                return self.model.imageInserts[index]
+            },
+            set: { newValue in
+                self.noteEdit {
+                    guard self.model.imageInserts.indices.contains(index) else { return }
+                    var insert = newValue
+                    insert.lineNumber = index
+                    insert.scale = min(500, max(1, insert.scale))
+                    insert.reliefHeight = min(50, max(0.1, insert.reliefHeight))
+                    self.model.imageInserts[index] = insert
                 }
             }
         )

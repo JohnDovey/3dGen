@@ -96,6 +96,54 @@ actor HostClient {
         )
     }
 
+    // MARK: Image library
+
+    func listImageFiles(query: String = "") async throws -> ImageLibraryListResult {
+        struct Params: Encodable { let query: String }
+        return try await call(method: "listImageFiles", params: Params(query: query), as: ImageLibraryListResult.self)
+    }
+
+    func readImageBytes(fileName: String) async throws -> ImageBytesResult {
+        struct Params: Encodable { let fileName: String }
+        return try await call(method: "readImageBytes", params: Params(fileName: fileName), as: ImageBytesResult.self)
+    }
+
+    func importImageFile(path: String) async throws -> ImageImportResult {
+        struct Params: Encodable { let path: String }
+        return try await call(method: "importImageFile", params: Params(path: path), as: ImageImportResult.self)
+    }
+
+    func deleteImageFile(fileName: String) async throws -> ImageImportResult {
+        struct Params: Encodable { let fileName: String }
+        return try await call(method: "deleteImageFile", params: Params(fileName: fileName), as: ImageImportResult.self)
+    }
+
+    func setImageKeywords(fileName: String, keywords: [String]) async throws -> ImageKeywordsResult {
+        struct Params: Encodable {
+            let fileName: String
+            let keywords: [String]
+        }
+        return try await call(
+            method: "setImageKeywords",
+            params: Params(fileName: fileName, keywords: keywords),
+            as: ImageKeywordsResult.self
+        )
+    }
+
+    func renderImageThumbnail(fileName: String? = nil, imageData: Data? = nil, width: Int = 64, height: Int = 64) async throws -> ImageThumbnailResult {
+        struct Params: Encodable {
+            let fileName: String?
+            let imageData: Data?
+            let width: Int
+            let height: Int
+        }
+        return try await call(
+            method: "renderImageThumbnail",
+            params: Params(fileName: fileName, imageData: imageData, width: width, height: height),
+            as: ImageThumbnailResult.self
+        )
+    }
+
     private func call<P: Encodable, R: Decodable>(method: String, params: P, as type: R.Type) async throws -> R {
         requestCounter += 1
         let id = String(requestCounter)

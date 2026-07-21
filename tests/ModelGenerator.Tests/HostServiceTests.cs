@@ -250,4 +250,31 @@ public class HostServiceTests : IDisposable
         _service.DeleteSvgFile(imported.FileName);
         Assert.DoesNotContain(_service.ListSvgFiles().Files, f => f.FileName == "star.svg");
     }
+
+    [Fact]
+    public void ImageLibrary_ImportSearchTagDelete_AndThumbnail()
+    {
+        // Minimal valid 1x1 PNG
+        byte[] png = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+        string source = Path.Combine(_tempDir, "dot.png");
+        File.WriteAllBytes(source, png);
+
+        var imported = _service.ImportImageFile(source);
+        Assert.Equal("dot.png", imported.FileName);
+
+        _service.SetImageKeywords(imported.FileName, new[] { "relief" });
+        var found = _service.ListImageFiles("relief");
+        Assert.Contains(found.Files, f => f.FileName == "dot.png");
+
+        var bytes = _service.ReadImageBytes(imported.FileName);
+        Assert.Equal(png.Length, bytes.Data.Length);
+
+        var thumb = _service.RenderImageThumbnail(imported.FileName, imageData: null, width: 32, height: 32);
+        Assert.True(thumb.Png.Length > 8);
+        Assert.Equal(0x89, thumb.Png[0]);
+
+        _service.DeleteImageFile(imported.FileName);
+        Assert.DoesNotContain(_service.ListImageFiles().Files, f => f.FileName == "dot.png");
+    }
 }
