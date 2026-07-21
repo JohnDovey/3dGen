@@ -75,8 +75,10 @@ size, and position mode. Click **Remove** on a row to delete it.
 
 **Dragging text in the viewport:** click and drag any line of text directly in
 the 3D preview to reposition it — this switches that line to **Manual** mode
-and fills in its X/Y/Z automatically. The base shape itself isn't draggable
-(dragging it just orbits the camera as usual).
+and fills in its X/Y/Z automatically. Clicking an item (whether or not you
+drag it) outlines it with a yellow selection box so it's always clear which
+item you're about to move; clicking empty space deselects. The base shape
+itself isn't draggable (dragging it just orbits the camera as usual).
 
 ## 3. Choosing colors
 
@@ -102,6 +104,12 @@ Under **SVG inserts**, click **+ Insert SVG...** to open the library:
   for future models
 - Select a file (its thumbnail previews the shape, including any holes/cutouts
   it contains) and click **Insert**
+- **Search** filters the library by filename or tag as you type; **Tags...**
+  lets you attach comma-separated keywords to the selected file (e.g. `logo,
+  brand`) so it's easier to find later; **Delete** permanently removes the
+  selected file (and its tags) from the library — this only affects the
+  library, not any model that already has it inserted, since inserted content
+  is copied into the model at insert time
 
 The inserted graphic gets its own row, just like a text line:
 
@@ -129,6 +137,8 @@ thumbnailing an SVG are different operations under the hood):
 - **Import Image...** copies one or more `.png`/`.jpg`/`.jpeg` files from disk
   into the app's library (`%LOCALAPPDATA%\ModelGenerator\ImageLibrary`)
 - Select a file and click **Insert**
+- **Search**, **Tags...**, and **Delete** work the same way as in the SVG
+  library above
 
 The inserted photo gets its own row:
 
@@ -153,7 +163,16 @@ just that logo's silhouette:
 SVG inserts: click and drag it directly in the 3D preview to reposition it
 (switches it to **Manual** mode).
 
-## 6. Save, open, and start a new model
+## 6. Undo and redo
+
+**Edit → Undo** (Ctrl+Z) and **Edit → Redo** (Ctrl+Y) step backward/forward
+through your edits — every shape/color/text/insert change, and every drag in
+the viewport, is undoable. A whole drag (from click to release) undoes as one
+step rather than one step per pixel of mouse movement, and the same applies to
+typing in a text field — pause for about half a second and the next edit
+starts a fresh undo step.
+
+## 7. Save, open, and start a new model
 
 The **File** menu has:
 
@@ -167,10 +186,15 @@ The **File** menu has:
 - **Export STL...** — see below
 - **Exit** — closes the app
 
+If the current model has unsaved changes (the title bar shows a trailing
+`*`), **New**, **Open...**, and closing the window all ask whether to save
+first, discard the changes, or cancel — so a stray click never silently loses
+work.
+
 Saved models (including their generated mesh) live in a local SQLite database at
 `%LOCALAPPDATA%\ModelGenerator\models.sqlite`.
 
-## 7. Export to STL
+## 8. Export to STL
 
 Click **Export STL...** (left panel or File menu) and choose where to save the
 `.stl` file. This exports the exact mesh currently shown in the preview, ready

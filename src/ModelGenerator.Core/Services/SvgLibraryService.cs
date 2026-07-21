@@ -10,10 +10,12 @@ namespace ModelGenerator.Core.Services;
 public class SvgLibraryService : ISvgLibraryService
 {
     private readonly string _libraryDirectory;
+    private readonly LibraryMetadataStore _metadata;
 
     public SvgLibraryService(string libraryDirectory)
     {
         _libraryDirectory = libraryDirectory;
+        _metadata = new LibraryMetadataStore(libraryDirectory);
     }
 
     public IReadOnlyList<string> ListSvgFiles() =>
@@ -50,4 +52,20 @@ public class SvgLibraryService : ISvgLibraryService
         var document = SvgDocument.FromSvg<SvgDocument>(svgContent);
         return document.Draw(width, height);
     }
+
+    public void DeleteFile(string fileName)
+    {
+        string path = Path.Combine(_libraryDirectory, fileName);
+        if (File.Exists(path))
+        {
+            File.Delete(path);
+        }
+        _metadata.RemoveEntry(fileName);
+    }
+
+    public IReadOnlyList<string> SearchFiles(string query) => _metadata.Filter(ListSvgFiles(), query);
+
+    public IReadOnlyList<string> GetKeywords(string fileName) => _metadata.GetKeywords(fileName);
+
+    public void SetKeywords(string fileName, IReadOnlyList<string> keywords) => _metadata.SetKeywords(fileName, keywords);
 }

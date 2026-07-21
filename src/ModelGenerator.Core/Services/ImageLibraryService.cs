@@ -14,10 +14,12 @@ public class ImageLibraryService : IImageLibraryService
     private static readonly string[] ImageExtensions = { "*.png", "*.jpg", "*.jpeg" };
 
     private readonly string _libraryDirectory;
+    private readonly LibraryMetadataStore _metadata;
 
     public ImageLibraryService(string libraryDirectory)
     {
         _libraryDirectory = libraryDirectory;
+        _metadata = new LibraryMetadataStore(libraryDirectory);
     }
 
     public IReadOnlyList<string> ListImageFiles()
@@ -68,4 +70,20 @@ public class ImageLibraryService : IImageLibraryService
         g.DrawImage(source, 0, 0, width, height);
         return thumbnail;
     }
+
+    public void DeleteFile(string fileName)
+    {
+        string path = Path.Combine(_libraryDirectory, fileName);
+        if (File.Exists(path))
+        {
+            File.Delete(path);
+        }
+        _metadata.RemoveEntry(fileName);
+    }
+
+    public IReadOnlyList<string> SearchFiles(string query) => _metadata.Filter(ListImageFiles(), query);
+
+    public IReadOnlyList<string> GetKeywords(string fileName) => _metadata.GetKeywords(fileName);
+
+    public void SetKeywords(string fileName, IReadOnlyList<string> keywords) => _metadata.SetKeywords(fileName, keywords);
 }

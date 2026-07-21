@@ -69,6 +69,67 @@ public class SvgLibraryServiceTests : IDisposable
         Assert.Equal(64, bitmap.Height);
     }
 
+    [Fact]
+    public void DeleteFile_RemovesItFromTheLibrary()
+    {
+        string sourcePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.svg");
+        File.WriteAllText(sourcePath, SampleSvg);
+        string importedName;
+        try
+        {
+            importedName = _service.ImportFile(sourcePath);
+        }
+        finally
+        {
+            File.Delete(sourcePath);
+        }
+
+        _service.DeleteFile(importedName);
+
+        Assert.DoesNotContain(importedName, _service.ListSvgFiles());
+    }
+
+    [Fact]
+    public void DeleteFile_AlsoRemovesItsKeywords()
+    {
+        string sourcePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.svg");
+        File.WriteAllText(sourcePath, SampleSvg);
+        string importedName;
+        try
+        {
+            importedName = _service.ImportFile(sourcePath);
+        }
+        finally
+        {
+            File.Delete(sourcePath);
+        }
+        _service.SetKeywords(importedName, new[] { "logo" });
+
+        _service.DeleteFile(importedName);
+
+        Assert.Empty(_service.GetKeywords(importedName));
+    }
+
+    [Fact]
+    public void SetKeywords_ThenSearchFiles_FindsItByKeyword()
+    {
+        string sourcePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.svg");
+        File.WriteAllText(sourcePath, SampleSvg);
+        string importedName;
+        try
+        {
+            importedName = _service.ImportFile(sourcePath);
+        }
+        finally
+        {
+            File.Delete(sourcePath);
+        }
+        _service.SetKeywords(importedName, new[] { "mascot" });
+
+        Assert.Contains(importedName, _service.SearchFiles("mascot"));
+        Assert.DoesNotContain(importedName, _service.SearchFiles("nonexistent-tag"));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_libraryDir))

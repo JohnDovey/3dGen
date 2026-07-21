@@ -69,6 +69,70 @@ public class ImageLibraryServiceTests : IDisposable
         Assert.Equal(64, bitmap.Height);
     }
 
+    [Fact]
+    public void DeleteFile_RemovesItFromTheLibrary()
+    {
+        byte[] sampleImage = CreateSamplePng();
+        string sourcePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.png");
+        File.WriteAllBytes(sourcePath, sampleImage);
+        string importedName;
+        try
+        {
+            importedName = _service.ImportFile(sourcePath);
+        }
+        finally
+        {
+            File.Delete(sourcePath);
+        }
+
+        _service.DeleteFile(importedName);
+
+        Assert.DoesNotContain(importedName, _service.ListImageFiles());
+    }
+
+    [Fact]
+    public void DeleteFile_AlsoRemovesItsKeywords()
+    {
+        byte[] sampleImage = CreateSamplePng();
+        string sourcePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.png");
+        File.WriteAllBytes(sourcePath, sampleImage);
+        string importedName;
+        try
+        {
+            importedName = _service.ImportFile(sourcePath);
+        }
+        finally
+        {
+            File.Delete(sourcePath);
+        }
+        _service.SetKeywords(importedName, new[] { "photo" });
+
+        _service.DeleteFile(importedName);
+
+        Assert.Empty(_service.GetKeywords(importedName));
+    }
+
+    [Fact]
+    public void SetKeywords_ThenSearchFiles_FindsItByKeyword()
+    {
+        byte[] sampleImage = CreateSamplePng();
+        string sourcePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.png");
+        File.WriteAllBytes(sourcePath, sampleImage);
+        string importedName;
+        try
+        {
+            importedName = _service.ImportFile(sourcePath);
+        }
+        finally
+        {
+            File.Delete(sourcePath);
+        }
+        _service.SetKeywords(importedName, new[] { "portrait" });
+
+        Assert.Contains(importedName, _service.SearchFiles("portrait"));
+        Assert.DoesNotContain(importedName, _service.SearchFiles("nonexistent-tag"));
+    }
+
     private static byte[] CreateSamplePng()
     {
         using var bitmap = new Bitmap(10, 10, PixelFormat.Format32bppArgb);

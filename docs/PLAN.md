@@ -108,9 +108,54 @@
   byte size exactly matched the expected triangle count (75,956 × 50 + 84-byte header). 74 tests
   passing total.
 
+- **Phase 10 (done):** Undo/redo, unsaved-changes protection, a viewport selection indicator, a
+  real drag-positioning bug fix, and library management (delete/search/tags) — a cluster of
+  editing-UX and reliability improvements requested together.
+  - **Undo/redo**: `UndoManager<T>` (new, `Core/Utilities`) is a plain snapshot stack — push/pop
+    full `Model` copies rather than reversible commands, since edits already mutate controls in
+    place. `MainForm` routes every panel's change event through one `OnEditableStateChanged`,
+    which records the *pre-edit* snapshot only for the first change in a burst; a 500ms idle
+    debounce coalesces a whole viewport drag (dozens of mouse-move events) or a whole burst of
+    typing into one undo step instead of one per event. New/Open/Undo/Redo all funnel through a
+    shared `RunGuardedFromUndoTracking`/`RestoreModelIntoControls` path so loading a model back
+    into the panels doesn't itself get recorded as a new edit. Edit menu gained Undo (Ctrl+Z) /
+    Redo (Ctrl+Y).
+  - **Unsaved-changes protection**: an `_isDirty` flag (set by the same `OnEditableStateChanged`
+    hook, cleared on successful Save) drives a trailing `*` in the title bar and a
+    save/discard/cancel prompt (`ConfirmDiscardUnsavedChangesAsync`) before New, Open, or closing
+    the window would otherwise discard work. `SaveModelAsync` now returns whether the save
+    actually succeeded, so an async `OnFormClosing` can cancel the close, prompt, save, and only
+    then re-issue `Close()`.
+  - **Viewport selection indicator**: `HelixViewportHost` tracks the last-clicked draggable item
+    and outlines it with a yellow wireframe box (rebuilt from its mesh's `Rect3D` bounds on every
+    `ShowModel` call, so it keeps following the item through a drag); clicking empty space
+    deselects.
+  - **Drag-positioning bug fix**: `SvgMeshConverter` (and, for the same reason,
+    `ImageMeshConverter`) scaled contours without first centering them on their own bounding box
+    — an SVG whose canvas/viewBox was bigger than the actual drawing (or a PNG with off-center
+    transparent padding) put local `(0,0)`, the point dragging actually moves, well away from the
+    artwork's visual center, so a drag appeared to yank the shape out from under the cursor the
+    instant it started. Fixed by centering on the bounding box first (`ShapeGenerator`'s
+    `CustomSvg` path already did this correctly — the bug was specific to inserts). Regression
+    tests assert the resulting mesh's bounding-box center sits at the origin for off-center
+    artwork.
+  - **Library management**: new shared `LibraryMetadataStore` (JSON sidecar `_metadata.json` per
+    library folder) backs `DeleteFile`/`SearchFiles`/`GetKeywords`/`SetKeywords` on both
+    `ISvgLibraryService` and `IImageLibraryService`. Both library dialogs gained a live
+    search-as-you-type box (thumbnails are rendered once and reused across filtering, not
+    re-rendered per keystroke), a **Delete** button (with confirmation), and a **Tags...** button
+    for comma-separated keywords, shown as the item's tooltip.
+  - Verified live: fresh launch no longer shows a false "modified" title (an early bug caught
+    during this pass — the constructor's initial blank text line was tripping the same dirty-flag
+    hook a real edit would); library search-as-you-type correctly filtered a 14-file real library
+    down to one match instantly, reusing cached thumbnails. 98 tests passing total.
+
 Remaining ideas (not currently planned as a phase): richer validation feedback in dialogs; a
 configurable alpha-inclusion threshold (currently a hardcoded 50%) if the default proves wrong
-for some images in practice.
+for some images in practice; the same off-center-artwork drag-jump class of bug likely also
+affects `ShapeGenerator.CustomSvg` in one respect — its centering is correct, but this phase
+didn't specifically re-verify dragging a `CustomSvg`-shaped model (the base shape itself isn't
+draggable, so this is low-risk, but noted for completeness).
 
 
 Windows desktop app (Visual Studio / Windows Forms) to generate 3D-printable models:

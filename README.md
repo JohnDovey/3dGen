@@ -21,12 +21,13 @@ file ready to slice and print.
 
 Actively developed. Core geometry/STL export, text embossing, the WinForms UI,
 save/load, the full shape set (including custom SVG outlines), an in-app Help
-viewer, drag-and-drop positioning, SVG graphics and photo bas-relief libraries
-with per-item inserts, and independent colors for the shape's floor/border and
-every inserted item are all done. See [`docs/PLAN.md`](docs/PLAN.md) for the
-full architecture write-up and phase-by-phase status, and
-[`docs/HOW_TO_USE.md`](docs/HOW_TO_USE.md) for a walkthrough of using the app
-(also available in-app via Help → How to Use).
+viewer, drag-and-drop positioning with a viewport selection indicator, full
+undo/redo, unsaved-changes protection, SVG graphics and photo bas-relief
+libraries (with search/tagging/delete) with per-item inserts, and independent
+colors for the shape's floor/border and every inserted item are all done. See
+[`docs/PLAN.md`](docs/PLAN.md) for the full architecture write-up and
+phase-by-phase status, and [`docs/HOW_TO_USE.md`](docs/HOW_TO_USE.md) for a
+walkthrough of using the app (also available in-app via Help → How to Use).
 
 ## Requirements
 
