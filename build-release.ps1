@@ -1,14 +1,15 @@
 <#
 .SYNOPSIS
-    Builds a Release, framework-dependent distribution of 3D Model Generator and
-    zips it up for distribution.
+    Builds a Release, self-contained single-file distribution of 3D Model Generator
+    and zips it up for distribution.
 
 .DESCRIPTION
-    This is a framework-dependent publish: the .NET 10 Desktop Runtime is NOT
-    bundled into the output. Anyone running the published app must already have
-    the .NET 10 Desktop Runtime installed (https://dotnet.microsoft.com/download).
-    This keeps the distributed zip small; the tradeoff is that runtime-less
-    machines need to install it once before the app will launch.
+    Publishes a single executable that bundles the app, its dependencies, the .NET
+    runtime, native libraries (e.g. SQLite), and content files (Help docs/images).
+    The target machine does not need the .NET Desktop Runtime installed.
+
+    Tradeoff: the resulting .exe is larger than a framework-dependent multi-file
+    publish, but distribution is one file and it runs out of the box.
 
 .PARAMETER Runtime
     The .NET Runtime Identifier to publish for. Defaults to win-x64.
@@ -19,7 +20,7 @@
 
 .EXAMPLE
     .\build-release.ps1
-    Runs the tests, then publishes and zips a win-x64 framework-dependent release.
+    Runs the tests, then publishes and zips a win-x64 self-contained single-file release.
 
 .EXAMPLE
     .\build-release.ps1 -SkipTests
@@ -43,8 +44,8 @@ $publishDir = Join-Path $distDir "publish"
 $version = $csprojXml.Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
 if (-not $version) { $version = "0.0.0" }
 
-Write-Host "3D Model Generator v$version - Release build ($Runtime, framework-dependent)" -ForegroundColor Cyan
-Write-Host "The .NET 10 Desktop Runtime is NOT bundled - it must already be installed on the target machine." -ForegroundColor Yellow
+Write-Host "3D Model Generator v$version - Release build ($Runtime, self-contained single-file)" -ForegroundColor Cyan
+Write-Host "The .NET runtime and all app content are packed into one executable." -ForegroundColor Yellow
 Write-Host ""
 
 if (-not $SkipTests) {
@@ -61,14 +62,25 @@ if (Test-Path $publishDir) {
 }
 New-Item -ItemType Directory -Force -Path $distDir | Out-Null
 
-Write-Host "Publishing..." -ForegroundColor Cyan
+Write-Host "Publishing single-file executable..." -ForegroundColor Cyan
 dotnet publish $uiProject `
     -c Release `
     -r $Runtime `
-    --self-contained false `
+    --self-contained true `
+    -p:PublishSingleFile=true `
+    -p:IncludeNativeLibrariesForSelfExtract=true `
+    -p:IncludeAllContentForSelfExtract=true `
+    -p:EnableCompressionInSingleFile=true `
     -o $publishDir
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet publish failed."
+}
+
+# Single-file publish may still leave .pdb / .xml next to the exe; only ship the binary.
+$exeName = "ModelGenerator.UI.exe"
+$exePath = Join-Path $publishDir $exeName
+if (-not (Test-Path $exePath)) {
+    throw "Expected single-file output not found: $exePath"
 }
 
 $zipName = "ModelGenerator-v$version-$Runtime.zip"
@@ -78,11 +90,12 @@ if (Test-Path $zipPath) {
 }
 
 Write-Host "Zipping..." -ForegroundColor Cyan
-Compress-Archive -Path (Join-Path $publishDir "*") -DestinationPath $zipPath
+Compress-Archive -Path $exePath -DestinationPath $zipPath
 
 Write-Host ""
 Write-Host "Done." -ForegroundColor Green
 Write-Host "  Publish folder: $publishDir"
-Write-Host "  Distributable:  $zipPath"
+Write-Host "  Single-file exe: $exePath"
+Write-Host "  Distributable:   $zipPath"
 Write-Host ""
-Write-Host "Note: requires the .NET 10 Desktop Runtime on any machine that runs this build." -ForegroundColor Yellow
+Write-Host "Note: self-contained - no separate .NET runtime install required." -ForegroundColor Yellow
