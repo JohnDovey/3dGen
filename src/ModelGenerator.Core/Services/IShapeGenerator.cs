@@ -1,3 +1,4 @@
+using System.Numerics;
 using ModelGenerator.Core.Models;
 
 namespace ModelGenerator.Core.Services;
@@ -22,4 +23,15 @@ public interface IShapeGenerator
     /// ring kept as separate meshes instead of merged — lets the UI color/render them
     /// independently. Dispatches by the model's ShapeType, mirroring Generate(Model).</summary>
     (Mesh Floor, Mesh Border) GenerateParts(Model model);
+
+    /// <summary>Border ring with optional top-surface cutouts (engraved border text). Empty
+    /// cutouts match <see cref="GenerateParts(Model)"/>.</summary>
+    (Mesh Floor, Mesh Border) GenerateParts(
+        Model model,
+        IReadOnlyList<IReadOnlyList<Vector2>> borderTopCutouts,
+        float cutoutDepth);
+
+    /// <summary>Outer/inner 2D polygons of the raised border (same as used for extrusion), without
+    /// building meshes — for border-text layout along the midline.</summary>
+    (IReadOnlyList<Vector2> Outer, IReadOnlyList<Vector2> Inner) GenerateBorderOutline(Model model);
 }

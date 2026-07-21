@@ -31,6 +31,7 @@ public class Model
     public List<TextLine> TextLines { get; set; } = new();
     public List<SvgInsert> SvgInserts { get; set; } = new();
     public List<ImageInsert> ImageInserts { get; set; } = new();
+    public List<BorderTextLine> BorderTextLines { get; set; } = new();
 
     public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
     public DateTime ModifiedDate { get; set; } = DateTime.UtcNow;

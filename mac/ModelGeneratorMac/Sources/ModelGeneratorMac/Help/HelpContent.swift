@@ -5,7 +5,7 @@ import Foundation
 /// 1. App bundle `Contents/Resources/Help/` (packaged release)
 /// 2. Repository `docs/` (development via `swift run` from the monorepo)
 enum HelpContent {
-    static let appVersion = "0.8.0"
+    static let appVersion = "0.9.0"
     static let copyright = "Copyright © John Dovey <dovey.john@gmail.com>"
 
     /// Directory containing HOW_TO_USE.md and optional `images/`.

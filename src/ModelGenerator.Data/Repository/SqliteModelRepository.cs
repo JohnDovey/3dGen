@@ -43,6 +43,7 @@ public class SqliteModelRepository : IModelRepository
         model.TextLines = await LoadTextLinesAsync(connection, modelId);
         model.SvgInserts = await LoadSvgInsertsAsync(connection, modelId);
         model.ImageInserts = await LoadImageInsertsAsync(connection, modelId);
+        model.BorderTextLines = await LoadBorderTextLinesAsync(connection, modelId);
         return model;
     }
 
@@ -66,6 +67,7 @@ public class SqliteModelRepository : IModelRepository
             model.TextLines = await LoadTextLinesAsync(connection, model.Id);
             model.SvgInserts = await LoadSvgInsertsAsync(connection, model.Id);
             model.ImageInserts = await LoadImageInsertsAsync(connection, model.Id);
+            model.BorderTextLines = await LoadBorderTextLinesAsync(connection, model.Id);
         }
 
         return models;
@@ -129,6 +131,12 @@ public class SqliteModelRepository : IModelRepository
             deleteImageInserts.CommandText = "DELETE FROM ImageInserts WHERE ModelId = @id;";
             deleteImageInserts.Parameters.AddWithValue("@id", model.Id);
             await deleteImageInserts.ExecuteNonQueryAsync();
+
+            using var deleteBorderText = connection.CreateCommand();
+            deleteBorderText.Transaction = transaction;
+            deleteBorderText.CommandText = "DELETE FROM BorderTextLines WHERE ModelId = @id;";
+            deleteBorderText.Parameters.AddWithValue("@id", model.Id);
+            await deleteBorderText.ExecuteNonQueryAsync();
         }
 
         foreach (var textLine in model.TextLines)
@@ -206,6 +214,28 @@ public class SqliteModelRepository : IModelRepository
             insertImage.Parameters.AddWithValue("@rotationZ", imageInsert.RotationZ);
             insertImage.Parameters.AddWithValue("@colorArgb", imageInsert.ColorArgb);
             await insertImage.ExecuteNonQueryAsync();
+        }
+
+        foreach (var borderText in model.BorderTextLines)
+        {
+            using var insertBorder = connection.CreateCommand();
+            insertBorder.Transaction = transaction;
+            insertBorder.CommandText = """
+                INSERT INTO BorderTextLines
+                    (ModelId, LineNumber, Content, FontName, FontSize, Height, Mode, AnchorAngleDegrees, ColorArgb)
+                VALUES
+                    (@modelId, @lineNumber, @content, @fontName, @fontSize, @height, @mode, @anchorAngleDegrees, @colorArgb);
+                """;
+            insertBorder.Parameters.AddWithValue("@modelId", model.Id);
+            insertBorder.Parameters.AddWithValue("@lineNumber", borderText.LineNumber);
+            insertBorder.Parameters.AddWithValue("@content", borderText.Content);
+            insertBorder.Parameters.AddWithValue("@fontName", borderText.FontName);
+            insertBorder.Parameters.AddWithValue("@fontSize", borderText.FontSize);
+            insertBorder.Parameters.AddWithValue("@height", borderText.Height);
+            insertBorder.Parameters.AddWithValue("@mode", (int)borderText.Mode);
+            insertBorder.Parameters.AddWithValue("@anchorAngleDegrees", borderText.AnchorAngleDegrees);
+            insertBorder.Parameters.AddWithValue("@colorArgb", borderText.ColorArgb);
+            await insertBorder.ExecuteNonQueryAsync();
         }
 
         transaction.Commit();
@@ -379,6 +409,40 @@ public class SqliteModelRepository : IModelRepository
             });
         }
         return inserts;
+    }
+
+    private static async Task<List<BorderTextLine>> LoadBorderTextLinesAsync(SqliteConnection connection, int modelId)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT * FROM BorderTextLines WHERE ModelId = @id ORDER BY LineNumber;";
+        command.Parameters.AddWithValue("@id", modelId);
+
+        var lines = new List<BorderTextLine>();
+        try
+        {
+            using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                lines.Add(new BorderTextLine
+                {
+                    Id = reader.GetInt32(reader.GetOrdinal("BorderTextLineId")),
+                    LineNumber = reader.GetInt32(reader.GetOrdinal("LineNumber")),
+                    Content = reader.GetString(reader.GetOrdinal("Content")),
+                    FontName = reader.GetString(reader.GetOrdinal("FontName")),
+                    FontSize = (float)reader.GetDouble(reader.GetOrdinal("FontSize")),
+                    Height = (float)reader.GetDouble(reader.GetOrdinal("Height")),
+                    Mode = (BorderTextMode)reader.GetInt32(reader.GetOrdinal("Mode")),
+                    AnchorAngleDegrees = (float)reader.GetDouble(reader.GetOrdinal("AnchorAngleDegrees")),
+                    ColorArgb = GetInt32OrDefault(reader, "ColorArgb", DarkOrangeArgb)
+                });
+            }
+        }
+        catch (SqliteException)
+        {
+            // Older DBs without the table — treat as empty until Initialize recreates schema.
+        }
+
+        return lines;
     }
 
     /// <summary>Defensive fallback for a NULL color column — the DB migration backfills existing

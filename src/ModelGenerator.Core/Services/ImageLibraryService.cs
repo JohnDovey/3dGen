@@ -57,6 +57,33 @@ public class ImageLibraryService : IImageLibraryService
         return fileName;
     }
 
+    public string ImportContent(string preferredFileName, byte[] imageData)
+    {
+        string fileName = string.IsNullOrWhiteSpace(preferredFileName) ? "import.png" : Path.GetFileName(preferredFileName);
+        string destination = Path.Combine(_libraryDirectory, fileName);
+        if (File.Exists(destination))
+        {
+            string baseName = Path.GetFileNameWithoutExtension(fileName);
+            string extension = Path.GetExtension(fileName);
+            if (string.IsNullOrEmpty(extension))
+            {
+                extension = ".png";
+            }
+
+            int counter = 2;
+            do
+            {
+                fileName = $"{baseName} ({counter}){extension}";
+                destination = Path.Combine(_libraryDirectory, fileName);
+                counter++;
+            } while (File.Exists(destination));
+        }
+
+        Directory.CreateDirectory(_libraryDirectory);
+        File.WriteAllBytes(destination, imageData);
+        return fileName;
+    }
+
     public byte[] RenderThumbnail(byte[] imageData, int width, int height)
     {
         using var source = SKBitmap.Decode(imageData);

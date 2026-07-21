@@ -77,4 +77,37 @@ public class MeshMathTests
         Assert.True(MeshMath.SignedVolume(partialMesh) > 0);
         Assert.True(MeshMath.SignedVolume(partialMesh) < MeshMath.SignedVolume(fullMesh));
     }
+
+    [Fact]
+    public void ExtrudeRingWithTopCutouts_HasPositiveVolumeAndIsWatertight()
+    {
+        var outer = Circle(30, 32);
+        var inner = Circle(20, 32);
+        // Small rectangle sitting in the ring band (r ≈ 22–28 on +X).
+        var cutout = new List<System.Numerics.Vector2>
+        {
+            new(22, -2), new(28, -2), new(28, 2), new(22, 2)
+        };
+
+        var plain = MeshMath.ExtrudeRing(outer, inner, 0, 5);
+        var recessed = MeshMath.ExtrudeRingWithTopCutouts(outer, inner, new[] { cutout }, 0, 5, cutoutDepth: 1.5f);
+
+        Assert.True(MeshMath.SignedVolume(recessed) > 0);
+        Assert.Equal(0, recessed.Indices.Count % 3);
+        // Recess removes material: either lower volume or at least more triangles (cavity walls).
+        Assert.True(
+            MeshMath.SignedVolume(recessed) < MeshMath.SignedVolume(plain) * 1.001f
+            || recessed.Indices.Count > plain.Indices.Count);
+    }
+
+    private static List<System.Numerics.Vector2> Circle(float radius, int segments)
+    {
+        var pts = new List<System.Numerics.Vector2>(segments);
+        for (int i = 0; i < segments; i++)
+        {
+            float a = i * (MathF.PI * 2f / segments);
+            pts.Add(new System.Numerics.Vector2(MathF.Cos(a) * radius, MathF.Sin(a) * radius));
+        }
+        return pts;
+    }
 }

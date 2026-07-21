@@ -1,5 +1,5 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using ModelGenerator.Core.Utilities;
 
 namespace ModelGenerator.Host.Protocol;
 
@@ -9,24 +9,8 @@ public static class HostProtocol
 {
     public const string Version = "1.0";
 
-    public static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        WriteIndented = false,
-        // Model enums (ShapeType, TextPositionMode, ImageDetail) travel as numbers — stable wire format.
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: true) }
-    };
-
-    public static readonly JsonSerializerOptions PrettyJsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        WriteIndented = true,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: true) }
-    };
+    public static readonly JsonSerializerOptions JsonOptions = CoreJsonOptions.Default;
+    public static readonly JsonSerializerOptions PrettyJsonOptions = CoreJsonOptions.Pretty;
 }
 
 /// <summary>Incoming request line.</summary>

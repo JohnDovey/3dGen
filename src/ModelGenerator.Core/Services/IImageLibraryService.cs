@@ -9,6 +9,10 @@ public interface IImageLibraryService
     /// final filename actually used.</summary>
     string ImportFile(string sourceFilePath);
 
+    /// <summary>Writes in-memory image bytes into the library (same name-collision rules as
+    /// <see cref="ImportFile"/>). Used by project-bundle import.</summary>
+    string ImportContent(string preferredFileName, byte[] imageData);
+
     /// <summary>Renders a PNG thumbnail of the image (width × height). UI layers decode the bytes
     /// into their toolkit image type.</summary>
     byte[] RenderThumbnail(byte[] imageData, int width, int height);

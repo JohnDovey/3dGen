@@ -21,11 +21,12 @@ file ready to slice and print.
 
 Windows (WinForms) and macOS (SwiftUI) front ends share portable Core/Data
 geometry and SQLite persistence. Full feature set includes custom SVG shapes,
-text/SVG/image inserts, libraries with search/tags, undo/redo, unsaved-changes
-protection, drag-to-reposition, and STL export. See
-[`docs/PLAN.md`](docs/PLAN.md) for architecture and phase history, and
-[`docs/HOW_TO_USE.md`](docs/HOW_TO_USE.md) for a walkthrough (also in-app via
-**Help → How to Use**).
+text/SVG/image inserts, **border-following text** (embossed or engraved on the
+rim), libraries with search/tags, undo/redo, unsaved-changes protection,
+drag-to-reposition, STL export, and **portable `.mgproj` project bundles**
+(export/import with graphics). See [`docs/PLAN.md`](docs/PLAN.md) for
+architecture and phase history, and [`docs/HOW_TO_USE.md`](docs/HOW_TO_USE.md)
+for a walkthrough (also in-app via **Help → How to Use**).
 
 ## Requirements
 

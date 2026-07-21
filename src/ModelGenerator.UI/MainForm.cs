@@ -1,5 +1,7 @@
+using System.IO;
 using ModelGenerator.Core.Models;
 using ModelGenerator.Core.Services;
+using ModelGenerator.Core.Services.ProjectBundle;
 using ModelGenerator.Core.Utilities;
 using ModelGenerator.Data.Repository;
 using ModelGenerator.UI.Controls;
@@ -13,11 +15,13 @@ public class MainForm : Form
     private readonly IModelRepository _repository;
     private readonly ISvgLibraryService _svgLibrary;
     private readonly IImageLibraryService _imageLibrary;
+    private readonly IProjectBundleService _projectBundleService;
 
     private readonly ShapeSelectorControl _shapeSelector;
     private readonly TextLinesPanel _textLinesPanel = new();
     private readonly SvgInsertsPanel _svgInsertsPanel;
     private readonly ImageInsertsPanel _imageInsertsPanel;
+    private readonly BorderTextLinesPanel _borderTextPanel = new();
     private readonly HelixViewportHost _viewportHost = new() { Dock = DockStyle.Fill };
     private readonly Button _exportButton = new() { Text = "Export STL...", AutoSize = true };
     private readonly Label _statusLabel = new() { Dock = DockStyle.Bottom, AutoSize = false, Height = 40, Padding = new Padding(6) };
@@ -44,12 +48,13 @@ public class MainForm : Form
     private bool _isDirty;
     private bool _isClosingConfirmed;
 
-    public MainForm(IModelOrchestrator orchestrator, IModelRepository repository, ISvgLibraryService svgLibrary, IImageLibraryService imageLibrary)
+    public MainForm(IModelOrchestrator orchestrator, IModelRepository repository, ISvgLibraryService svgLibrary, IImageLibraryService imageLibrary, IProjectBundleService projectBundleService)
     {
         _orchestrator = orchestrator;
         _repository = repository;
         _svgLibrary = svgLibrary;
         _imageLibrary = imageLibrary;
+        _projectBundleService = projectBundleService;
         _shapeSelector = new ShapeSelectorControl(svgLibrary);
         _svgInsertsPanel = new SvgInsertsPanel(svgLibrary);
         _imageInsertsPanel = new ImageInsertsPanel(imageLibrary);
@@ -93,7 +98,18 @@ public class MainForm : Form
         // NOT, which is why an earlier version of this left panel rendered all its inputs
         // collapsed to ~1px wide). For same-edge Dock siblings, the LAST one added ends up
         // closest to that edge, so add these in reverse of the desired top-to-bottom order.
+        var borderTextLabel = new Label
+        {
+            Text = "Border text",
+            AutoSize = true,
+            Dock = DockStyle.Top,
+            Padding = new Padding(8, 12, 0, 4),
+            Font = new System.Drawing.Font(Font, System.Drawing.FontStyle.Bold)
+        };
+
         leftPanel.Controls.Add(_exportButton);
+        leftPanel.Controls.Add(_borderTextPanel);
+        leftPanel.Controls.Add(borderTextLabel);
         leftPanel.Controls.Add(_imageInsertsPanel);
         leftPanel.Controls.Add(imageInsertsLabel);
         leftPanel.Controls.Add(_svgInsertsPanel);
@@ -125,6 +141,7 @@ public class MainForm : Form
         _textLinesPanel.LinesChanged += (_, _) => OnEditableStateChanged();
         _svgInsertsPanel.InsertsChanged += (_, _) => OnEditableStateChanged();
         _imageInsertsPanel.InsertsChanged += (_, _) => OnEditableStateChanged();
+        _borderTextPanel.LinesChanged += (_, _) => OnEditableStateChanged();
         _exportButton.Click += (_, _) => ExportStl();
         _viewportHost.ItemDragged += (kind, index, x, y, z) =>
         {
@@ -165,6 +182,8 @@ public class MainForm : Form
         fileMenu.DropDownItems.Add("Save &As...", null, async (_, _) => await SaveModelAsync(forceNewName: true));
         fileMenu.DropDownItems.Add(new ToolStripSeparator());
         fileMenu.DropDownItems.Add("&Export STL...", null, (_, _) => ExportStl());
+        fileMenu.DropDownItems.Add("Export &Project...", null, (_, _) => ExportProject());
+        fileMenu.DropDownItems.Add("Import Pro&ject...", null, async (_, _) => await ImportProjectAsync());
         fileMenu.DropDownItems.Add(new ToolStripSeparator());
         fileMenu.DropDownItems.Add("E&xit", null, (_, _) => Close());
 
@@ -239,6 +258,7 @@ public class MainForm : Form
             _textLinesPanel.AddLine();
             _svgInsertsPanel.Clear();
             _imageInsertsPanel.Clear();
+            _borderTextPanel.Clear();
         });
 
         // A different document has no relationship to the previous one's undo history.
@@ -281,6 +301,7 @@ public class MainForm : Form
             _textLinesPanel.LoadLines(model.TextLines);
             _svgInsertsPanel.LoadInserts(model.SvgInserts);
             _imageInsertsPanel.LoadInserts(model.ImageInserts);
+            _borderTextPanel.LoadLines(model.BorderTextLines);
         });
 
         // A different document has no relationship to the previous one's undo history.
@@ -373,6 +394,7 @@ public class MainForm : Form
             _textLinesPanel.LoadLines(model.TextLines);
             _svgInsertsPanel.LoadInserts(model.SvgInserts);
             _imageInsertsPanel.LoadInserts(model.ImageInserts);
+            _borderTextPanel.LoadLines(model.BorderTextLines);
         });
 
         _isDirty = true;
@@ -482,6 +504,84 @@ public class MainForm : Form
         }
     }
 
+
+    private void ExportProject()
+    {
+        using var dialog = new SaveFileDialog
+        {
+            Filter = "3D Model Project (*.mgproj)|*.mgproj",
+            FileName = string.IsNullOrWhiteSpace(_currentModelName) || _currentModelName == "Untitled"
+                ? "project.mgproj"
+                : _currentModelName + ".mgproj"
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            var model = BuildModelFromControls();
+            model.Name = _currentModelName;
+            _projectBundleService.ExportBundle(model, dialog.FileName, AppVersion);
+            _statusLabel.Text = $"Exported project to {Path.GetFileName(dialog.FileName)}.";
+            _statusLabel.ForeColor = System.Drawing.Color.Black;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Could not export the project:\n{ex.Message}", "Export Project",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private async Task ImportProjectAsync()
+    {
+        if (!await ConfirmDiscardUnsavedChangesAsync())
+        {
+            return;
+        }
+
+        using var dialog = new OpenFileDialog
+        {
+            Filter = "3D Model Project (*.mgproj)|*.mgproj"
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            var model = _projectBundleService.ImportBundle(dialog.FileName);
+            _currentModelId = null;
+            _currentModelName = string.IsNullOrWhiteSpace(model.Name) ? "Untitled" : model.Name;
+
+            RunGuardedFromUndoTracking(() =>
+            {
+                _shapeSelector.LoadFrom(model);
+                _textLinesPanel.LoadLines(model.TextLines);
+                _svgInsertsPanel.LoadInserts(model.SvgInserts);
+                _imageInsertsPanel.LoadInserts(model.ImageInserts);
+                _borderTextPanel.LoadLines(model.BorderTextLines);
+            });
+
+            _undoManager.Clear();
+            _isDirty = false;
+            UpdateTitle();
+            RegeneratePreview();
+            ResetUndoBurstState();
+            _lastCommittedModel = BuildModelFromControls();
+            UpdateUndoRedoMenuState();
+            _statusLabel.Text = $"Imported project '{_currentModelName}'.";
+            _statusLabel.ForeColor = System.Drawing.Color.Black;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Could not import the project:\n{ex.Message}", "Import Project",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
     private Model BuildModelFromControls()
     {
         var model = new Model();
@@ -489,6 +589,7 @@ public class MainForm : Form
         model.TextLines = _textLinesPanel.Lines;
         model.SvgInserts = _svgInsertsPanel.Inserts;
         model.ImageInserts = _imageInsertsPanel.Inserts;
+        model.BorderTextLines = _borderTextPanel.Lines;
         return model;
     }
 
@@ -502,7 +603,7 @@ public class MainForm : Form
 
         try
         {
-            var (floor, border, textMeshes, svgMeshes, imageMeshes) = _orchestrator.GenerateModelParts(model);
+            var (floor, border, textMeshes, svgMeshes, imageMeshes, borderTextMeshes) = _orchestrator.GenerateModelParts(model);
 
             var merged = new CoreMesh();
             merged.Append(floor);
@@ -519,6 +620,13 @@ public class MainForm : Form
             {
                 merged.Append(imageMesh.Mesh);
             }
+            foreach (var borderText in borderTextMeshes)
+            {
+                if (borderText.Mesh.Vertices.Count > 0)
+                {
+                    merged.Append(borderText.Mesh);
+                }
+            }
             _currentMesh = merged;
 
             var items = textMeshes
@@ -527,11 +635,17 @@ public class MainForm : Form
                 .Concat(imageMeshes.Select((im, i) => new DraggableMesh(im.Mesh, im.Insert.ColorArgb.ToWpfColor(), DraggableItemKind.ImageInsert, i)))
                 .ToList();
 
+            var borderTextColored = borderTextMeshes
+                .Where(b => b.Mesh.Vertices.Count > 0)
+                .Select(b => new ColoredMesh(b.Mesh, b.Line.ColorArgb.ToWpfColor()))
+                .ToList();
+
             _viewportHost.ShowModel(
                 new ColoredMesh(floor, model.BaseColorArgb.ToWpfColor()),
                 new ColoredMesh(border, model.BorderColorArgb.ToWpfColor()),
                 items,
-                model.ShapeThickness);
+                model.ShapeThickness,
+                borderTextColored);
             _statusLabel.Text = $"{_currentMesh.Vertices.Count} vertices, {_currentMesh.Indices.Count / 3} triangles.";
             _statusLabel.ForeColor = System.Drawing.Color.Black;
             _exportButton.Enabled = true;

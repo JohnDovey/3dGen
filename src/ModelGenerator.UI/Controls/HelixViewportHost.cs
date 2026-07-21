@@ -80,9 +80,15 @@ public class HelixViewportHost : UserControl
     }
 
     /// <summary>Renders the shape's floor and border (each their own color, never draggable) and
-    /// every text/SVG item as a separate, individually pickable, individually colored visual.
+    /// every text/SVG/image item as a separate, individually pickable, individually colored visual.
+    /// Optional non-draggable border-text meshes are rendered after the border.
     /// dragPlaneZ is the world Z of the shape's top surface, used when dragging an item.</summary>
-    public void ShowModel(ColoredMesh floor, ColoredMesh border, IReadOnlyList<DraggableMesh> items, float dragPlaneZ)
+    public void ShowModel(
+        ColoredMesh floor,
+        ColoredMesh border,
+        IReadOnlyList<DraggableMesh> items,
+        float dragPlaneZ,
+        IReadOnlyList<ColoredMesh>? borderTextMeshes = null)
     {
         ClearVisuals();
 
@@ -91,6 +97,19 @@ public class HelixViewportHost : UserControl
 
         _borderVisual = new ModelVisual3D { Content = BuildModel(border.Mesh, border.Color) };
         _viewport.Children.Add(_borderVisual);
+
+        if (borderTextMeshes is not null)
+        {
+            foreach (var bt in borderTextMeshes)
+            {
+                if (bt.Mesh.Vertices.Count == 0)
+                {
+                    continue;
+                }
+
+                _viewport.Children.Add(new ModelVisual3D { Content = BuildModel(bt.Mesh, bt.Color) });
+            }
+        }
 
         foreach (var item in items)
         {

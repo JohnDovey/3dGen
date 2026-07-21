@@ -205,6 +205,14 @@
   assembling `ModelGenerator.app` with embedded self-contained Host + Help
   resources and a versioned zip. Dual-platform README / launch notes.
 
+- **Project bundles + border text (done, v0.9.0):** `.mgproj` zip export/import
+  (`ProjectBundleService` in Core) with content-hash library dedup and
+  self-contained assets. Border-following text (`BorderTextLine`) embossed or
+  truly engraved along the border midline (shrink-to-fit, anchor angle);
+  `MeshMath.ExtrudeRingWithTopCutouts` for recesses; WinForms File menu Import/
+  Export Project and Border text panel. See
+  `docs/EXPORT_IMPORT_AND_BORDER_TEXT_PLAN.md`.
+
 Remaining ideas (not currently planned as a phase): richer validation feedback in dialogs; a
 configurable alpha-inclusion threshold (currently a hardcoded 50%) if the default proves wrong
 for some images in practice; the same off-center-artwork drag-jump class of bug likely also

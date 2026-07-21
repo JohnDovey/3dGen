@@ -22,6 +22,7 @@ static class Program
             new TextMeshConverter(),
             new SvgMeshConverter(),
             new ImageMeshConverter(),
+            new BorderTextMeshConverter(),
             new TextPositioner(),
             new MeshComposer());
 
@@ -38,11 +39,13 @@ static class Program
         string imageLibraryDir = Path.Combine(appDataDir, "ImageLibrary");
         Directory.CreateDirectory(imageLibraryDir);
         var imageLibraryService = new ImageLibraryService(imageLibraryDir);
+        var projectBundleService = new ModelGenerator.Core.Services.ProjectBundle.ProjectBundleService(
+            svgLibraryService, imageLibraryService);
 
         var connectionFactory = new ConnectionFactory(dbPath);
         new DatabaseInitializer(connectionFactory).Initialize();
         var repository = new SqliteModelRepository(connectionFactory);
 
-        Application.Run(new MainForm(orchestrator, repository, svgLibraryService, imageLibraryService));
+        Application.Run(new MainForm(orchestrator, repository, svgLibraryService, imageLibraryService, projectBundleService));
     }
 }

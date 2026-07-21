@@ -94,6 +94,20 @@ public class DatabaseInitializer
                     FOREIGN KEY (ModelId) REFERENCES Models(ModelId) ON DELETE CASCADE
                 );
 
+                CREATE TABLE IF NOT EXISTS BorderTextLines (
+                    BorderTextLineId INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ModelId INTEGER NOT NULL,
+                    LineNumber INTEGER NOT NULL,
+                    Content TEXT NOT NULL,
+                    FontName TEXT NOT NULL,
+                    FontSize REAL NOT NULL DEFAULT 8,
+                    Height REAL NOT NULL DEFAULT 1.5,
+                    Mode INTEGER NOT NULL DEFAULT 0,
+                    AnchorAngleDegrees REAL NOT NULL DEFAULT 90,
+                    ColorArgb INTEGER NOT NULL DEFAULT {DarkOrangeArgb},
+                    FOREIGN KEY (ModelId) REFERENCES Models(ModelId) ON DELETE CASCADE
+                );
+
                 CREATE TABLE IF NOT EXISTS MeshCache (
                     MeshCacheId INTEGER PRIMARY KEY AUTOINCREMENT,
                     ModelId INTEGER NOT NULL UNIQUE,

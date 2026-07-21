@@ -20,15 +20,43 @@ public class ShapeGenerator : IShapeGenerator
         _ => throw new ArgumentOutOfRangeException(nameof(model), model.ShapeType, "Unknown shape type.")
     };
 
-    public (Mesh Floor, Mesh Border) GenerateParts(Model model) => model.ShapeType switch
+    public (Mesh Floor, Mesh Border) GenerateParts(Model model) =>
+        GenerateParts(model, Array.Empty<IReadOnlyList<Vector2>>(), cutoutDepth: 0);
+
+    public (Mesh Floor, Mesh Border) GenerateParts(
+        Model model,
+        IReadOnlyList<IReadOnlyList<Vector2>> borderTopCutouts,
+        float cutoutDepth)
     {
-        ShapeType.Circle => BuildCircleParts(model.ShapeSize, model.ShapeThickness, model.BorderThickness, model.BorderHeight),
-        ShapeType.Rectangle => BuildRectangleParts(model.ShapeSize, model.ShapeHeight, model.ShapeThickness, model.BorderThickness, model.BorderHeight),
-        ShapeType.Triangle => BuildTriangleParts(model.ShapeSize, model.ShapeThickness, model.BorderThickness, model.BorderHeight),
-        ShapeType.Shield => BuildShieldParts(model.ShapeSize, model.ShapeThickness, model.BorderThickness, model.BorderHeight),
-        ShapeType.CustomSvg => BuildCustomSvgParts(RequireCustomShapeSvg(model), model.ShapeSize, model.ShapeThickness, model.BorderThickness, model.BorderHeight),
-        _ => throw new ArgumentOutOfRangeException(nameof(model), model.ShapeType, "Unknown shape type.")
-    };
+        var (outer, inner) = GenerateBorderOutline(model);
+        return BuildFloorAndBorder(outer, inner, model.ShapeThickness, model.BorderHeight, borderTopCutouts, cutoutDepth);
+    }
+
+    public (IReadOnlyList<Vector2> Outer, IReadOnlyList<Vector2> Inner) GenerateBorderOutline(Model model) =>
+        model.ShapeType switch
+        {
+            ShapeType.Circle => GetCircleOutline(model.ShapeSize, model.BorderThickness),
+            ShapeType.Rectangle => GetRectangleOutline(model.ShapeSize, model.ShapeHeight, model.BorderThickness),
+            ShapeType.Triangle => GetTriangleOutline(model.ShapeSize, model.BorderThickness),
+            ShapeType.Shield => GetShieldOutline(model.ShapeSize, model.BorderThickness),
+            ShapeType.CustomSvg => GetCustomSvgOutline(RequireCustomShapeSvg(model), model.ShapeSize, model.BorderThickness),
+            _ => throw new ArgumentOutOfRangeException(nameof(model), model.ShapeType, "Unknown shape type.")
+        };
+
+    private static (Mesh Floor, Mesh Border) BuildFloorAndBorder(
+        IReadOnlyList<Vector2> outer,
+        IReadOnlyList<Vector2> inner,
+        float thickness,
+        float borderHeight,
+        IReadOnlyList<IReadOnlyList<Vector2>> cutouts,
+        float cutoutDepth)
+    {
+        var floor = MeshMath.ExtrudeSolid(outer, 0, thickness);
+        var border = cutouts.Count > 0 && cutoutDepth > 0
+            ? MeshMath.ExtrudeRingWithTopCutouts(outer, inner, cutouts, thickness, thickness + borderHeight, cutoutDepth)
+            : MeshMath.ExtrudeRing(outer, inner, thickness, thickness + borderHeight);
+        return (floor, border);
+    }
 
     private static string RequireCustomShapeSvg(Model model)
     {
@@ -76,6 +104,12 @@ public class ShapeGenerator : IShapeGenerator
 
     private static (Mesh Floor, Mesh Border) BuildCircleParts(float diameter, float thickness, float borderThickness, float borderHeight)
     {
+        var (outer, inner) = GetCircleOutline(diameter, borderThickness);
+        return BuildFloorAndBorder(outer, inner, thickness, borderHeight, Array.Empty<IReadOnlyList<Vector2>>(), 0);
+    }
+
+    private static (List<Vector2> Outer, List<Vector2> Inner) GetCircleOutline(float diameter, float borderThickness)
+    {
         float outerRadius = diameter / 2f;
         float innerRadius = outerRadius - borderThickness;
         if (innerRadius <= 0)
@@ -83,30 +117,34 @@ public class ShapeGenerator : IShapeGenerator
             throw new ArgumentException("Border thickness must be less than the circle's radius.");
         }
 
-        var outer = CircleOutline(outerRadius);
-        var inner = CircleOutline(innerRadius);
-
-        var floor = MeshMath.ExtrudeSolid(outer, 0, thickness);
-        var border = MeshMath.ExtrudeRing(outer, inner, thickness, thickness + borderHeight);
-        return (floor, border);
+        return (CircleOutline(outerRadius), CircleOutline(innerRadius));
     }
 
     private static (Mesh Floor, Mesh Border) BuildRectangleParts(float width, float height, float thickness, float borderThickness, float borderHeight)
+    {
+        var (outer, inner) = GetRectangleOutline(width, height, borderThickness);
+        return BuildFloorAndBorder(outer, inner, thickness, borderHeight, Array.Empty<IReadOnlyList<Vector2>>(), 0);
+    }
+
+    private static (List<Vector2> Outer, List<Vector2> Inner) GetRectangleOutline(float width, float height, float borderThickness)
     {
         if (borderThickness * 2 >= width || borderThickness * 2 >= height)
         {
             throw new ArgumentException("Border thickness is too large for the given rectangle dimensions.");
         }
 
-        var outer = RectangleOutline(width, height);
-        var inner = RectangleOutline(width - 2 * borderThickness, height - 2 * borderThickness);
-
-        var floor = MeshMath.ExtrudeSolid(outer, 0, thickness);
-        var border = MeshMath.ExtrudeRing(outer, inner, thickness, thickness + borderHeight);
-        return (floor, border);
+        return (
+            RectangleOutline(width, height),
+            RectangleOutline(width - 2 * borderThickness, height - 2 * borderThickness));
     }
 
     private static (Mesh Floor, Mesh Border) BuildTriangleParts(float size, float thickness, float borderThickness, float borderHeight)
+    {
+        var (outer, inner) = GetTriangleOutline(size, borderThickness);
+        return BuildFloorAndBorder(outer, inner, thickness, borderHeight, Array.Empty<IReadOnlyList<Vector2>>(), 0);
+    }
+
+    private static (List<Vector2> Outer, List<Vector2> Inner) GetTriangleOutline(float size, float borderThickness)
     {
         // Equilateral triangle, centroid at the origin, "size" = side length.
         float height = size * MathF.Sqrt(3) / 2f;
@@ -130,30 +168,33 @@ public class ShapeGenerator : IShapeGenerator
 
         float scale = (inradius - borderThickness) / inradius;
         var inner = outer.Select(p => p * scale).ToList();
-
-        var floor = MeshMath.ExtrudeSolid(outer, 0, thickness);
-        var border = MeshMath.ExtrudeRing(outer, inner, thickness, thickness + borderHeight);
-        return (floor, border);
+        return (outer, inner);
     }
 
     private static (Mesh Floor, Mesh Border) BuildShieldParts(float size, float thickness, float borderThickness, float borderHeight)
     {
+        var (outer, inner) = GetShieldOutline(size, borderThickness);
+        return BuildFloorAndBorder(outer, inner, thickness, borderHeight, Array.Empty<IReadOnlyList<Vector2>>(), 0);
+    }
+
+    private static (List<Vector2> Outer, List<Vector2> Inner) GetShieldOutline(float size, float borderThickness)
+    {
         var outer = ShieldOutline(size);
         var inner = RadialInset(outer, borderThickness, "shield");
-
-        var floor = MeshMath.ExtrudeSolid(outer, 0, thickness);
-        var border = MeshMath.ExtrudeRing(outer, inner, thickness, thickness + borderHeight);
-        return (floor, border);
+        return (outer, inner);
     }
 
     private static (Mesh Floor, Mesh Border) BuildCustomSvgParts(string svgContent, float size, float thickness, float borderThickness, float borderHeight)
     {
+        var (outer, inner) = GetCustomSvgOutline(svgContent, size, borderThickness);
+        return BuildFloorAndBorder(outer, inner, thickness, borderHeight, Array.Empty<IReadOnlyList<Vector2>>(), 0);
+    }
+
+    private static (List<Vector2> Outer, List<Vector2> Inner) GetCustomSvgOutline(string svgContent, float size, float borderThickness)
+    {
         var outer = ExtractCustomOutline(svgContent, size);
         var inner = RadialInset(outer, borderThickness, "custom shape");
-
-        var floor = MeshMath.ExtrudeSolid(outer, 0, thickness);
-        var border = MeshMath.ExtrudeRing(outer, inner, thickness, thickness + borderHeight);
-        return (floor, border);
+        return (outer, inner);
     }
 
     /// <summary>Picks the SVG's largest-area contour as the shape's outer boundary, normalizes its

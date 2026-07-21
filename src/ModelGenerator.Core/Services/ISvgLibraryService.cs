@@ -9,6 +9,10 @@ public interface ISvgLibraryService
     /// final filename actually used.</summary>
     string ImportFile(string sourceFilePath);
 
+    /// <summary>Writes in-memory SVG text into the library (same name-collision rules as
+    /// <see cref="ImportFile"/>). Used by project-bundle import.</summary>
+    string ImportContent(string preferredFileName, string svgContent);
+
     /// <summary>Renders a PNG thumbnail of the SVG (width × height). UI layers decode the bytes
     /// into their toolkit image type (Bitmap, NSImage, etc.).</summary>
     byte[] RenderThumbnail(string svgContent, int width, int height);

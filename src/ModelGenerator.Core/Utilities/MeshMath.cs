@@ -140,6 +140,119 @@ public static class MeshMath
         return mesh;
     }
 
+    /// <summary>Like <see cref="ExtrudeRing"/>, but the top cap is tessellated with additional
+    /// cutout contours as holes (for engraved border text). Each cutout gets walls down to
+    /// <paramref name="zTop"/> − <paramref name="cutoutDepth"/> and a floor at that depth.
+    /// Empty cutouts or non-positive depth fall back to <see cref="ExtrudeRing"/>.</summary>
+    public static Mesh ExtrudeRingWithTopCutouts(
+        IReadOnlyList<Vector2> outer,
+        IReadOnlyList<Vector2> inner,
+        IReadOnlyList<IReadOnlyList<Vector2>> cutoutContours,
+        float zBottom,
+        float zTop,
+        float cutoutDepth)
+    {
+        if (cutoutContours.Count == 0 || cutoutDepth <= 0f)
+        {
+            return ExtrudeRing(outer, inner, zBottom, zTop);
+        }
+
+        if (outer.Count != inner.Count)
+        {
+            throw new ArgumentException("Outer and inner outlines must have the same point count.");
+        }
+
+        float floorZ = zTop - cutoutDepth;
+        if (floorZ < zBottom)
+        {
+            floorZ = zBottom;
+        }
+
+        var mesh = new Mesh();
+        int n = outer.Count;
+
+        // Bottom ring (unchanged — recess does not go through).
+        for (int i = 0; i < n; i++)
+        {
+            int j = (i + 1) % n;
+            mesh.AddTriangle(
+                new Vector3(outer[i].X, outer[i].Y, zBottom),
+                new Vector3(outer[j].X, outer[j].Y, zBottom),
+                new Vector3(inner[j].X, inner[j].Y, zBottom));
+            mesh.AddTriangle(
+                new Vector3(outer[i].X, outer[i].Y, zBottom),
+                new Vector3(inner[j].X, inner[j].Y, zBottom),
+                new Vector3(inner[i].X, inner[i].Y, zBottom));
+        }
+
+        AddSideWall(mesh, outer, zBottom, zTop, outward: true);
+        AddSideWall(mesh, inner, zBottom, zTop, outward: false);
+
+        // Top cap with ring hole + cutout holes via LibTessDotNet.
+        var tess = new Tess();
+        AddContourEnsuringWinding(tess, outer, wantPositiveArea: true);
+        AddContourEnsuringWinding(tess, inner, wantPositiveArea: false);
+        foreach (var cutout in cutoutContours)
+        {
+            if (cutout.Count >= 3)
+            {
+                AddContourEnsuringWinding(tess, cutout, wantPositiveArea: false);
+            }
+        }
+        tess.Tessellate(WindingRule.NonZero, ElementType.Polygons, 3);
+
+        for (int i = 0; i < tess.ElementCount; i++)
+        {
+            var v0 = tess.Vertices[tess.Elements[i * 3]].Position;
+            var v1 = tess.Vertices[tess.Elements[i * 3 + 1]].Position;
+            var v2 = tess.Vertices[tess.Elements[i * 3 + 2]].Position;
+            mesh.AddTriangle(
+                new Vector3(v0.X, v0.Y, zTop),
+                new Vector3(v1.X, v1.Y, zTop),
+                new Vector3(v2.X, v2.Y, zTop));
+        }
+
+        // Cutout cavities: walls into the recess + floor at floorZ.
+        foreach (var cutout in cutoutContours)
+        {
+            if (cutout.Count < 3)
+            {
+                continue;
+            }
+
+            // Walls facing into the cavity.
+            AddSideWall(mesh, cutout, floorZ, zTop, outward: false);
+
+            // Floor of the recess (tessellated — glyphs may not be star-shaped).
+            var floorTess = new Tess();
+            AddContourEnsuringWinding(floorTess, cutout, wantPositiveArea: true);
+            floorTess.Tessellate(WindingRule.NonZero, ElementType.Polygons, 3);
+            for (int i = 0; i < floorTess.ElementCount; i++)
+            {
+                var v0 = floorTess.Vertices[floorTess.Elements[i * 3]].Position;
+                var v1 = floorTess.Vertices[floorTess.Elements[i * 3 + 1]].Position;
+                var v2 = floorTess.Vertices[floorTess.Elements[i * 3 + 2]].Position;
+                // Face up (same winding as ExtrudeContours top) so the floor is visible from above.
+                mesh.AddTriangle(
+                    new Vector3(v0.X, v0.Y, floorZ),
+                    new Vector3(v1.X, v1.Y, floorZ),
+                    new Vector3(v2.X, v2.Y, floorZ));
+            }
+        }
+
+        return mesh;
+    }
+
+    private static void AddContourEnsuringWinding(Tess tess, IReadOnlyList<Vector2> contour, bool wantPositiveArea)
+    {
+        bool positive = SignedArea(contour) > 0;
+        IEnumerable<Vector2> points = (positive == wantPositiveArea) ? contour : contour.Reverse();
+        var verts = points
+            .Select(p => new ContourVertex { Position = new Vec3 { X = p.X, Y = p.Y, Z = 0 } })
+            .ToArray();
+        tess.AddContour(verts);
+    }
+
     /// <summary>Extrudes a masked heightmap grid into a solid — used for image bas-relief inserts.
     /// topZ[row, col] is the world Z of each grid vertex (row 0 / col 0 at the -Y/-X corner, grid
     /// centered at the origin); included[cellRow, cellCol] marks which cells (one row/col smaller

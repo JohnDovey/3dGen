@@ -174,7 +174,31 @@ just that logo's silhouette:
 SVG inserts: click and drag it directly in the 3D preview to reposition it
 (switches it to **Manual** mode).
 
-## 6. Undo and redo
+## 6. Text on the border
+
+Under **Border text**, add lines that follow the raised rim (like lettering on
+a coin):
+
+- **Mode → Embossed** — letters sit proud of the border top.
+- **Mode → Engraved** — letters are cut into the border (a real recess).
+- **Size** is natural font size; if the string is too long to fit once around
+  the rim, it shrinks just enough to close the loop. Short text leaves a gap.
+- **Anchor°** centers the span on the border (90° = top of the shape by default).
+
+Border text is not dragged in the viewport — edit Anchor° numerically.
+
+## 7. Export and import a project
+
+**File → Export Project…** writes a `.mgproj` file (a zip) with the model
+settings plus SVG/image assets. Hand that file to someone else or move it
+between machines.
+
+**File → Import Project…** loads a `.mgproj` into the editor (after the usual
+unsaved-changes prompt). Graphics already in your local libraries are reused
+by content hash (no duplicates); new graphics are added to the library. The
+imported project is treated as unsaved (`Id = 0`) until you Save.
+
+## 8. Undo and redo
 
 **Edit → Undo** (Ctrl+Z) and **Edit → Redo** (Ctrl+Y) step backward/forward
 through your edits — every shape/color/text/insert change, and every drag in

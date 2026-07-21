@@ -12,6 +12,7 @@ public class ModelOrchestratorTests
         new TextMeshConverter(),
         new SvgMeshConverter(),
         new ImageMeshConverter(),
+        new BorderTextMeshConverter(),
         new TextPositioner(),
         new MeshComposer());
 
@@ -66,7 +67,7 @@ public class ModelOrchestratorTests
             }
         };
 
-        var (floor, border, textMeshes, svgMeshes, imageMeshes) = _orchestrator.GenerateModelParts(model);
+        var (floor, border, textMeshes, svgMeshes, imageMeshes, borderTextMeshes) = _orchestrator.GenerateModelParts(model);
         var merged = _orchestrator.GenerateModel(model);
 
         Assert.Equal(2, textMeshes.Count);
@@ -105,7 +106,7 @@ public class ModelOrchestratorTests
             }
         };
 
-        var (floor, border, textMeshes, svgMeshes, imageMeshes) = _orchestrator.GenerateModelParts(model);
+        var (floor, border, textMeshes, svgMeshes, imageMeshes, borderTextMeshes) = _orchestrator.GenerateModelParts(model);
         var merged = _orchestrator.GenerateModel(model);
 
         Assert.Single(textMeshes);
@@ -147,7 +148,7 @@ public class ModelOrchestratorTests
             }
         };
 
-        var (floor, border, textMeshes, svgMeshes, imageMeshes) = _orchestrator.GenerateModelParts(model);
+        var (floor, border, textMeshes, svgMeshes, imageMeshes, borderTextMeshes) = _orchestrator.GenerateModelParts(model);
         var merged = _orchestrator.GenerateModel(model);
 
         Assert.Single(textMeshes);

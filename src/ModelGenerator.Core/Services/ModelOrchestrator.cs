@@ -1,17 +1,18 @@
+using System.Numerics;
 using ModelGenerator.Core.Models;
 using ModelGenerator.Core.Utilities;
 
 namespace ModelGenerator.Core.Services;
 
-/// <summary>Wires shape generation, text/SVG/image-to-mesh conversion, positioning, and
-/// composition into the full parameters → mesh workflow. Cross-platform once Core converters
-/// are portable (Skia / Svg.Skia).</summary>
+/// <summary>Wires shape generation, text/SVG/image/border-text conversion, positioning, and
+/// composition into the full parameters → mesh workflow.</summary>
 public class ModelOrchestrator : IModelOrchestrator
 {
     private readonly IShapeGenerator _shapeGenerator;
     private readonly ITextMeshConverter _textMeshConverter;
     private readonly ISvgMeshConverter _svgMeshConverter;
     private readonly IImageMeshConverter _imageMeshConverter;
+    private readonly IBorderTextMeshConverter _borderTextMeshConverter;
     private readonly ITextPositioner _textPositioner;
     private readonly IMeshComposer _meshComposer;
 
@@ -20,6 +21,7 @@ public class ModelOrchestrator : IModelOrchestrator
         ITextMeshConverter textMeshConverter,
         ISvgMeshConverter svgMeshConverter,
         IImageMeshConverter imageMeshConverter,
+        IBorderTextMeshConverter borderTextMeshConverter,
         ITextPositioner textPositioner,
         IMeshComposer meshComposer)
     {
@@ -27,26 +29,42 @@ public class ModelOrchestrator : IModelOrchestrator
         _textMeshConverter = textMeshConverter;
         _svgMeshConverter = svgMeshConverter;
         _imageMeshConverter = imageMeshConverter;
+        _borderTextMeshConverter = borderTextMeshConverter;
         _textPositioner = textPositioner;
         _meshComposer = meshComposer;
     }
 
     public Mesh GenerateModel(Model model)
     {
-        var (floor, border, textMeshes, svgMeshes, imageMeshes) = GenerateModelParts(model);
+        var (floor, border, textMeshes, svgMeshes, imageMeshes, borderTextMeshes) = GenerateModelParts(model);
 
-        // Every mesh already has its transform baked in, so this is a plain merge. Color is
-        // irrelevant for STL export, so floor/border don't need to stay separate here.
         var allMeshes = new List<Mesh> { floor, border };
         allMeshes.AddRange(textMeshes.Select(t => t.Mesh));
         allMeshes.AddRange(svgMeshes.Select(s => s.Mesh));
         allMeshes.AddRange(imageMeshes.Select(i => i.Mesh));
+        allMeshes.AddRange(borderTextMeshes.Where(b => b.Mesh.Vertices.Count > 0).Select(b => b.Mesh));
         return _meshComposer.MergeMeshes(allMeshes);
     }
 
-    public (Mesh Floor, Mesh Border, IReadOnlyList<PositionedTextMesh> TextMeshes, IReadOnlyList<PositionedSvgMesh> SvgMeshes, IReadOnlyList<PositionedImageMesh> ImageMeshes) GenerateModelParts(Model model)
+    public (Mesh Floor, Mesh Border, IReadOnlyList<PositionedTextMesh> TextMeshes, IReadOnlyList<PositionedSvgMesh> SvgMeshes, IReadOnlyList<PositionedImageMesh> ImageMeshes, IReadOnlyList<RenderedBorderTextMesh> BorderTextMeshes) GenerateModelParts(Model model)
     {
-        var (floor, border) = _shapeGenerator.GenerateParts(model);
+        var (outer, inner) = _shapeGenerator.GenerateBorderOutline(model);
+        var (midline, midlineLength) = BorderTextMeshConverter.BuildMidline(outer, inner);
+
+        var engraved = model.BorderTextLines.Where(l => l.Mode == BorderTextMode.Engraved && !string.IsNullOrEmpty(l.Content)).ToList();
+        var cutouts = new List<IReadOnlyList<Vector2>>();
+        float cutoutDepth = 0;
+        if (engraved.Count > 0)
+        {
+            cutoutDepth = engraved.Max(l => l.Height);
+            foreach (var line in engraved)
+            {
+                cutouts.AddRange(_borderTextMeshConverter.LayoutGlyphContours(line, midline, midlineLength));
+            }
+        }
+
+        var (floor, border) = _shapeGenerator.GenerateParts(model, cutouts, cutoutDepth);
+        float borderTopZ = model.ShapeThickness + model.BorderHeight;
 
         var rawTextMeshes = _textMeshConverter.ConvertMultilineText(model.TextLines);
         var positionedTextMeshes = PositionItems(model.TextLines, rawTextMeshes, model, _textPositioner);
@@ -66,13 +84,23 @@ public class ModelOrchestrator : IModelOrchestrator
             .Zip(positionedImageMeshes, (insert, mesh) => new PositionedImageMesh(insert, mesh))
             .ToList();
 
-        return (floor, border, textResults, svgResults, imageResults);
+        var borderTextResults = new List<RenderedBorderTextMesh>();
+        foreach (var line in model.BorderTextLines)
+        {
+            if (line.Mode == BorderTextMode.Engraved)
+            {
+                borderTextResults.Add(new RenderedBorderTextMesh(line, new Mesh()));
+            }
+            else
+            {
+                var mesh = _borderTextMeshConverter.ConvertBorderTextToMesh(line, outer, inner, borderTopZ);
+                borderTextResults.Add(new RenderedBorderTextMesh(line, mesh));
+            }
+        }
+
+        return (floor, border, textResults, svgResults, imageResults, borderTextResults);
     }
 
-    /// <summary>Positions a set of items (text lines or SVG inserts) that each carry a position
-    /// mode: all AutoCenter-mode items are batched through one ITextPositioner.AutoCenter call so
-    /// they stack/center together as a group, while Manual/Relative items are positioned
-    /// individually. Returns each item's raw mesh with its transform applied.</summary>
     private static IReadOnlyList<Mesh> PositionItems<T>(
         IReadOnlyList<T> items, IReadOnlyList<Mesh> rawMeshes, Model model, ITextPositioner positioner)
         where T : IPositionable

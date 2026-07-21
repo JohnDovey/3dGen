@@ -60,6 +60,7 @@ public sealed class HostService
             new TextMeshConverter(),
             new SvgMeshConverter(),
             new ImageMeshConverter(),
+            new BorderTextMeshConverter(),
             new TextPositioner(),
             new MeshComposer());
 
@@ -82,7 +83,7 @@ public sealed class HostService
 
     public GeneratePartsResult GenerateParts(Model model)
     {
-        var (floor, border, textMeshes, svgMeshes, imageMeshes) = _orchestrator.GenerateModelParts(model);
+        var (floor, border, textMeshes, svgMeshes, imageMeshes, borderTextMeshes) = _orchestrator.GenerateModelParts(model);
 
         var result = new GeneratePartsResult
         {
@@ -105,6 +106,12 @@ public sealed class HostService
                 Index = i,
                 ColorArgb = im.Insert.ColorArgb,
                 Mesh = WireMesh.FromMesh(im.Mesh, im.Insert.ColorArgb)
+            }).ToList(),
+            BorderTextMeshes = borderTextMeshes.Select((b, i) => new WirePositionedMesh
+            {
+                Index = i,
+                ColorArgb = b.Line.ColorArgb,
+                Mesh = WireMesh.FromMesh(b.Mesh, b.Line.ColorArgb)
             }).ToList()
         };
 
@@ -112,12 +119,14 @@ public sealed class HostService
             + result.Border.Vertices.Length / 3
             + result.TextMeshes.Sum(t => t.Mesh.Vertices.Length / 3)
             + result.SvgMeshes.Sum(s => s.Mesh.Vertices.Length / 3)
-            + result.ImageMeshes.Sum(im => im.Mesh.Vertices.Length / 3);
+            + result.ImageMeshes.Sum(im => im.Mesh.Vertices.Length / 3)
+            + result.BorderTextMeshes.Sum(b => b.Mesh.Vertices.Length / 3);
         int indices = result.Floor.Indices.Length
             + result.Border.Indices.Length
             + result.TextMeshes.Sum(t => t.Mesh.Indices.Length)
             + result.SvgMeshes.Sum(s => s.Mesh.Indices.Length)
-            + result.ImageMeshes.Sum(im => im.Mesh.Indices.Length);
+            + result.ImageMeshes.Sum(im => im.Mesh.Indices.Length)
+            + result.BorderTextMeshes.Sum(b => b.Mesh.Indices.Length);
 
         result.VertexCount = vertices;
         result.TriangleCount = indices / 3;

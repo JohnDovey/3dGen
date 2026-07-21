@@ -31,7 +31,7 @@ public class TextMeshConverter : ITextMeshConverter
             return new List<List<Vector2>>();
         }
 
-        using var typeface = ResolveTypeface(fontName);
+        using var typeface = SkiaFontResolver.ResolveTypeface(fontName);
         // Size is in user units (mm), matching the previous GDI+ GraphicsUnit.World convention.
         using var font = new SKFont(typeface, emSize)
         {
@@ -44,18 +44,5 @@ public class TextMeshConverter : ITextMeshConverter
 
         using var path = font.GetTextPath(text, new SKPoint(0, 0));
         return SkiaPathContours.ExtractContours(path);
-    }
-
-    private static SKTypeface ResolveTypeface(string fontName)
-    {
-        var typeface = SKTypeface.FromFamilyName(fontName);
-        if (typeface is not null && !string.IsNullOrEmpty(typeface.FamilyName))
-        {
-            // FromFamilyName always returns something, but may silently fall back; prefer default
-            // only when the requested family is empty/missing entirely.
-            return typeface;
-        }
-
-        return SKTypeface.Default;
     }
 }

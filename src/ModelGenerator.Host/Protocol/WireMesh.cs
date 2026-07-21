@@ -75,6 +75,7 @@ public sealed class GeneratePartsResult
     public List<WirePositionedMesh> TextMeshes { get; set; } = new();
     public List<WirePositionedMesh> SvgMeshes { get; set; } = new();
     public List<WirePositionedMesh> ImageMeshes { get; set; } = new();
+    public List<WirePositionedMesh> BorderTextMeshes { get; set; } = new();
     public int VertexCount { get; set; }
     public int TriangleCount { get; set; }
 }
