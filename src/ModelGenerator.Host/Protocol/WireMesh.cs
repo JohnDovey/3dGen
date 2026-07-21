@@ -125,6 +125,17 @@ public sealed class DeleteModelResult
     public bool Deleted { get; set; }
 }
 
+public sealed class ExportProjectResult
+{
+    public string Path { get; set; } = string.Empty;
+    public long Bytes { get; set; }
+}
+
+public sealed class ImportProjectResult
+{
+    public Model Model { get; set; } = new();
+}
+
 public sealed class SvgLibraryItemDto
 {
     public string FileName { get; set; } = string.Empty;

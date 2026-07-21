@@ -59,6 +59,7 @@ static void PrintHelp()
 
         RPC methods (protocol 1.0): ping, generateParts, exportStl,
           listModels, getModel, saveModel, deleteModel,
+          exportProject, importProject,
           listSvgFiles, readSvgContent, importSvgFile, deleteSvgFile,
           getSvgKeywords, setSvgKeywords, renderSvgThumbnail,
           listImageFiles, readImageBytes, importImageFile, deleteImageFile,

@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using ModelGenerator.Core.Models;
 using ModelGenerator.Core.Services;
+using ModelGenerator.Core.Services.ProjectBundle;
 using ModelGenerator.Data.Database;
 using ModelGenerator.Data.Repository;
 using ModelGenerator.Host.Protocol;
@@ -16,6 +17,7 @@ public sealed class HostService
     private readonly IModelRepository _repository;
     private readonly ISvgLibraryService _svgLibrary;
     private readonly IImageLibraryService _imageLibrary;
+    private readonly IProjectBundleService _projectBundle;
     private readonly string _appDataDir;
 
     public HostService(
@@ -23,12 +25,14 @@ public sealed class HostService
         IModelRepository repository,
         ISvgLibraryService svgLibrary,
         IImageLibraryService imageLibrary,
+        IProjectBundleService projectBundle,
         string appDataDir)
     {
         _orchestrator = orchestrator;
         _repository = repository;
         _svgLibrary = svgLibrary;
         _imageLibrary = imageLibrary;
+        _projectBundle = projectBundle;
         _appDataDir = appDataDir;
     }
 
@@ -70,8 +74,9 @@ public sealed class HostService
         var repository = new SqliteModelRepository(connectionFactory);
         var svgLibrary = new SvgLibraryService(Path.Combine(appDataDir, "SvgLibrary"));
         var imageLibrary = new ImageLibraryService(Path.Combine(appDataDir, "ImageLibrary"));
+        var projectBundle = new ProjectBundleService(svgLibrary, imageLibrary);
 
-        return new HostService(orchestrator, repository, svgLibrary, imageLibrary, appDataDir);
+        return new HostService(orchestrator, repository, svgLibrary, imageLibrary, projectBundle, appDataDir);
     }
 
     public PingResult Ping() => new()
@@ -199,6 +204,38 @@ public sealed class HostService
     {
         _repository.DeleteModelAsync(id).GetAwaiter().GetResult();
         return new DeleteModelResult { Id = id, Deleted = true };
+    }
+
+    /// <summary>Writes a portable <c>.mgproj</c> zip (parameters + assets) to <paramref name="path"/>.</summary>
+    public ExportProjectResult ExportProject(Model model, string path, string? appVersion = null)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new HostInvalidParamsException("path is required.");
+
+        string version = string.IsNullOrWhiteSpace(appVersion)
+            ? Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0"
+            : appVersion!;
+        _projectBundle.ExportBundle(model, path, version);
+        var info = new FileInfo(path);
+        return new ExportProjectResult
+        {
+            Path = Path.GetFullPath(path),
+            Bytes = info.Exists ? info.Length : 0
+        };
+    }
+
+    /// <summary>Reads a <c>.mgproj</c> zip, imports assets into local libraries (content-hash dedup),
+    /// and returns a model with <c>Id = 0</c> ready to edit/save.</summary>
+    public ImportProjectResult ImportProject(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new HostInvalidParamsException("path is required.");
+        if (!File.Exists(path))
+            throw new HostInvalidParamsException($"Project file not found: {path}");
+
+        var model = _projectBundle.ImportBundle(path);
+        model.Id = 0;
+        return new ImportProjectResult { Model = model };
     }
 
 
@@ -429,6 +466,13 @@ public sealed class HostService
                     OptionalBytes(paramsElement, "imageData", "data"),
                     OptionalInt(paramsElement, 64, "width", "w"),
                     OptionalInt(paramsElement, 64, "height", "h")),
+            "exportproject" or "export_project" or "exportbundle" or "export_bundle"
+                => ExportProject(
+                    RequireModel(paramsElement),
+                    RequireString(paramsElement, "path", "filePath", "zipPath"),
+                    OptionalString(paramsElement, null, "appVersion", "version")),
+            "importproject" or "import_project" or "importbundle" or "import_bundle"
+                => ImportProject(RequireString(paramsElement, "path", "filePath", "zipPath")),
             _ => throw new HostMethodNotFoundException(method)
         };
     }

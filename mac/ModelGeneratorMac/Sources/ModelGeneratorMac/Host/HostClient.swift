@@ -25,6 +25,29 @@ actor HostClient {
         return try await call(method: "exportStl", params: Params(model: model, path: path), as: ExportStlResult.self)
     }
 
+    func exportProject(model: WireModel, path: String, appVersion: String? = nil) async throws -> ExportProjectResult {
+        struct Params: Encodable {
+            let model: WireModel
+            let path: String
+            let appVersion: String?
+        }
+        return try await call(
+            method: "exportProject",
+            params: Params(model: model, path: path, appVersion: appVersion),
+            as: ExportProjectResult.self
+        )
+    }
+
+    func importProject(path: String) async throws -> WireModel {
+        struct Params: Encodable { let path: String }
+        let result: ImportProjectResult = try await call(
+            method: "importProject",
+            params: Params(path: path),
+            as: ImportProjectResult.self
+        )
+        return result.model
+    }
+
     func listModels() async throws -> ListModelsResult {
         try await call(method: "listModels", params: [:] as [String: String], as: ListModelsResult.self)
     }

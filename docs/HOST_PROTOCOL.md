@@ -81,6 +81,7 @@ Returns:
   "textMeshes": [ { "index":0, "colorArgb":..., "mesh":{...} } ],
   "svgMeshes": [ ... ],
   "imageMeshes": [ ... ],
+  "borderTextMeshes": [ ... ],
   "vertexCount": 1234,
   "triangleCount": 567
 }
@@ -96,6 +97,25 @@ Meshes use **flat float arrays** for vertices/normals (`[x,y,z, x,y,z, ...]`).
 
 Generates the merged mesh and writes a **binary STL**. Returns path, byte size,
 vertex/triangle counts.
+
+### `exportProject`
+
+```json
+{"id":"3b","method":"exportProject","params":{"model":{ /* Model */ },"path":"/tmp/badge.mgproj","appVersion":"0.9.0"}}
+```
+
+Writes a portable **`.mgproj`** zip (manifest + asset files for custom SVG,
+SVG inserts, image inserts, and border text). Optional `appVersion` is stored
+in the manifest. Returns `{ "path", "bytes" }`.
+
+### `importProject`
+
+```json
+{"id":"3c","method":"importProject","params":{"path":"/tmp/badge.mgproj"}}
+```
+
+Reads a `.mgproj` zip, imports new assets into the local SVG/image libraries
+(content-hash dedup), and returns `{ "model": { /* full Model, id = 0 */ } }`.
 
 ### `listModels`
 
@@ -174,8 +194,13 @@ Library files live under `{appData}/ImageLibrary/`.
   "borderColorArgb": -5192482,
   "textLines": [],
   "svgInserts": [],
-  "imageInserts": []
+  "imageInserts": [],
+  "borderTextLines": []
 }
 ```
 
 `shapeType`: 0=Circle, 1=Triangle, 2=Shield, 3=Rectangle, 4=CustomSvg.
+
+`borderTextLines` entries: `content`, `fontName`, `fontSize`, `height` (mm),
+`mode` (0=embossed, 1=engraved), `anchorAngleDegrees` (0°=+X, 90°=top, CCW),
+`colorArgb`.

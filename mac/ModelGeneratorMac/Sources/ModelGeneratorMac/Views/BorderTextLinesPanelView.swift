@@ -1,16 +1,16 @@
 import SwiftUI
 
-struct TextLinesPanelView: View {
+struct BorderTextLinesPanelView: View {
     @EnvironmentObject private var appModel: AppModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Text lines")
+                Text("Border text")
                     .font(.headline)
                 Spacer()
                 Button {
-                    appModel.addTextLine()
+                    appModel.addBorderTextLine()
                 } label: {
                     Label("Add", systemImage: "plus")
                 }
@@ -18,56 +18,58 @@ struct TextLinesPanelView: View {
                 .controlSize(.small)
             }
 
-            if appModel.model.textLines.isEmpty {
-                Text("No text lines — click Add to emboss text.")
+            Text("Lettering along the raised border (coin rim). Not drag-positioned.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if appModel.model.borderTextLines.isEmpty {
+                Text("No border text — click Add for rim lettering.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            ForEach(Array(appModel.model.textLines.enumerated()), id: \.element.id) { index, _ in
-                TextLineEditorView(
+            ForEach(Array(appModel.model.borderTextLines.enumerated()), id: \.element.id) { index, _ in
+                BorderTextLineEditorView(
                     index: index,
-                    line: appModel.textLineBinding(at: index),
+                    line: appModel.borderTextLineBinding(at: index),
                     canRemove: true
                 )
-                .id(appModel.model.textLines[index].id)
+                .id(appModel.model.borderTextLines[index].id)
             }
         }
     }
 }
 
-struct TextLineEditorView: View {
+struct BorderTextLineEditorView: View {
     let index: Int
-    @Binding var line: WireTextLine
+    @Binding var line: WireBorderTextLine
     let canRemove: Bool
     @EnvironmentObject private var appModel: AppModel
 
-    /// Local draft so keystrokes don't rewrite `@Published model` every character
-    /// (which rebuilds the field and steals focus / sends keys to the terminal).
     @State private var contentDraft: String = ""
     @State private var contentCommitTask: Task<Void, Never>?
 
-    private var positionMode: Binding<PositionModeOption> {
+    private var modeBinding: Binding<BorderTextModeOption> {
         Binding(
-            get: { self.line.positionModeOption },
-            set: { self.line.positionModeOption = $0 }
+            get: { self.line.modeOption },
+            set: { self.line.modeOption = $0 }
         )
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Line \(index + 1)")
+                Text("Border line \(index + 1)")
                     .font(.subheadline.weight(.semibold))
                 Spacer()
                 Button(role: .destructive) {
-                    appModel.removeTextLine(at: index)
+                    appModel.removeBorderTextLine(at: index)
                 } label: {
                     Image(systemName: "trash")
                 }
                 .buttonStyle(.borderless)
                 .disabled(!canRemove)
-                .help("Remove this text line")
+                .help("Remove this border text line")
             }
 
             TextField("Text", text: $contentDraft)
@@ -105,14 +107,37 @@ struct TextLineEditorView: View {
 
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Emboss (mm)").font(.caption).foregroundStyle(.secondary)
+                    Text("Height (mm)").font(.caption).foregroundStyle(.secondary)
                     TextField(
-                        "Emboss",
-                        value: $line.textHeight,
+                        "Height",
+                        value: $line.height,
                         format: .number.precision(.fractionLength(0...2))
                     )
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 72)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Mode").font(.caption).foregroundStyle(.secondary)
+                    Picker("Mode", selection: modeBinding) {
+                        ForEach(BorderTextModeOption.allCases) { mode in
+                            Text(mode.description).tag(mode)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 110)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Anchor°").font(.caption).foregroundStyle(.secondary)
+                    TextField(
+                        "Anchor",
+                        value: $line.anchorAngleDegrees,
+                        format: .number.precision(.fractionLength(0...1))
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 64)
+                    .help("0° = +X, 90° = top of shape (CCW)")
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -130,23 +155,6 @@ struct TextLineEditorView: View {
 
                 Spacer()
             }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Position").font(.caption).foregroundStyle(.secondary)
-                Picker("Position", selection: positionMode) {
-                    ForEach(PositionModeOption.allCases) { mode in
-                        Text(mode.description).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-            }
-
-            HStack {
-                coordField("X", value: $line.positionX, enabled: line.positionModeOption.showsXYZ)
-                coordField("Y", value: $line.positionY, enabled: line.positionModeOption.showsXYZ)
-                coordField("Z", value: $line.positionZ, enabled: line.positionModeOption.showsXYZ)
-                coordField("Rot°", value: $line.rotationZ, enabled: true)
-            }
         }
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
@@ -158,7 +166,6 @@ struct TextLineEditorView: View {
             contentDraft = line.content
         }
         .onChange(of: line.content) { _, newValue in
-            // External load / undo — sync draft without re-entrancy loop.
             if contentDraft != newValue {
                 contentDraft = newValue
             }
@@ -188,19 +195,5 @@ struct TextLineEditorView: View {
         var updated = line
         updated.content = text
         line = updated
-    }
-
-    private func coordField(_ title: String, value: Binding<Float>, enabled: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.caption2).foregroundStyle(.secondary)
-            TextField(
-                title,
-                value: value,
-                format: .number.precision(.fractionLength(0...2))
-            )
-            .textFieldStyle(.roundedBorder)
-            .disabled(!enabled)
-            .opacity(enabled ? 1 : 0.45)
-        }
     }
 }

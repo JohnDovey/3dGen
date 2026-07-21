@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 @main
@@ -14,6 +15,9 @@ struct ModelGeneratorMacApp: App {
                 .frame(minWidth: 1000, minHeight: 640)
                 .onAppear {
                     appDelegate.appModel = appModel
+                    // Ensure window is key when launched via `swift run` from a terminal.
+                    NSApp.setActivationPolicy(.regular)
+                    NSApp.activate(ignoringOtherApps: true)
                 }
                 .sheet(isPresented: $showHelp) {
                     HelpView()
@@ -51,6 +55,18 @@ struct ModelGeneratorMacApp: App {
                     appModel.requestSaveAs()
                 }
                 .keyboardShortcut("s", modifiers: [.command, .shift])
+
+                Divider()
+
+                Button("Export Project…") {
+                    appModel.exportProject()
+                }
+                .keyboardShortcut("p", modifiers: [.command, .shift])
+
+                Button("Import Project…") {
+                    appModel.requestImportProject()
+                }
+                .keyboardShortcut("i", modifiers: [.command, .shift])
 
                 Divider()
 

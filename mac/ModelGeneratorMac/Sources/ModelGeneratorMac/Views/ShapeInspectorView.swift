@@ -53,6 +53,10 @@ struct ShapeInspectorView: View {
 
                 Divider()
 
+                BorderTextLinesPanelView()
+
+                Divider()
+
                 Button {
                     appModel.exportSTL()
                 } label: {
@@ -61,6 +65,22 @@ struct ShapeInspectorView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!appModel.canExport)
+
+                Button {
+                    appModel.exportProject()
+                } label: {
+                    Label("Export Project…", systemImage: "doc.zipper")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+
+                Button {
+                    appModel.requestImportProject()
+                } label: {
+                    Label("Import Project…", systemImage: "doc.badge.arrow.up")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
 
                 if !appModel.hostVersion.isEmpty {
                     Text("Host v\(appModel.hostVersion)")

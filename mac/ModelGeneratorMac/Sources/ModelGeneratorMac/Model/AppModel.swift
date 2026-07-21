@@ -49,6 +49,7 @@ final class AppModel: ObservableObject {
     enum DiscardAction {
         case newDocument
         case openDocument
+        case importProject
         case quit
     }
 
@@ -120,6 +121,34 @@ final class AppModel: ObservableObject {
     private func normalizeTextLineFonts() {
         for i in model.textLines.indices {
             model.textLines[i].fontName = FontCatalog.resolve(model.textLines[i].fontName)
+        }
+        for i in model.borderTextLines.indices {
+            model.borderTextLines[i].fontName = FontCatalog.resolve(model.borderTextLines[i].fontName)
+        }
+    }
+
+    // MARK: - Border text lines
+
+    func addBorderTextLine() {
+        noteEdit {
+            let line = WireBorderTextLine.blank(lineNumber: self.model.borderTextLines.count)
+            self.model.borderTextLines.append(line)
+            self.renumberBorderTextLines()
+        }
+    }
+
+    func removeBorderTextLine(at index: Int) {
+        guard model.borderTextLines.indices.contains(index) else { return }
+        noteEdit {
+            self.model.borderTextLines.remove(at: index)
+            self.renumberBorderTextLines()
+        }
+    }
+
+    func renumberBorderTextLines() {
+        for i in model.borderTextLines.indices {
+            model.borderTextLines[i].lineNumber = i
+            model.borderTextLines[i].fontName = FontCatalog.resolve(model.borderTextLines[i].fontName)
         }
     }
 
@@ -542,8 +571,16 @@ final class AppModel: ObservableObject {
             let result = try await client.generateParts(model: model)
             parts = result
             let textCount = model.textLines.filter { !$0.content.isEmpty }.count
-            let textNote = textCount > 0 ? " · \(textCount) text line\(textCount == 1 ? "" : "s")" : ""
-            statusText = "\(result.vertexCount) vertices, \(result.triangleCount) triangles\(textNote)."
+            let borderCount = model.borderTextLines.filter { !$0.content.isEmpty }.count
+            var notes: [String] = []
+            if textCount > 0 {
+                notes.append("\(textCount) text line\(textCount == 1 ? "" : "s")")
+            }
+            if borderCount > 0 {
+                notes.append("\(borderCount) border text")
+            }
+            let note = notes.isEmpty ? "" : " · " + notes.joined(separator: ", ")
+            statusText = "\(result.vertexCount) vertices, \(result.triangleCount) triangles\(note)."
             statusIsError = false
         } catch {
             parts = nil
@@ -567,6 +604,14 @@ final class AppModel: ObservableObject {
             pendingDiscardAction = .openDocument
         } else {
             Task { await presentOpenSheet() }
+        }
+    }
+
+    func requestImportProject() {
+        if isDirty {
+            pendingDiscardAction = .importProject
+        } else {
+            importProjectFromPanel()
         }
     }
 
@@ -596,6 +641,8 @@ final class AppModel: ObservableObject {
             performNewDocument()
         case .openDocument:
             await presentOpenSheet()
+        case .importProject:
+            importProjectFromPanel()
         case .quit:
             MacAppSupport.allowTerminate = true
             NSApp.terminate(nil)
@@ -665,6 +712,10 @@ final class AppModel: ObservableObject {
             }
             for i in loaded.imageInserts.indices {
                 loaded.imageInserts[i].id = UUID()
+            }
+            for i in loaded.borderTextLines.indices {
+                loaded.borderTextLines[i].fontName = FontCatalog.resolve(loaded.borderTextLines[i].fontName)
+                loaded.borderTextLines[i].id = UUID()
             }
             if loaded.textLines.isEmpty {
                 loaded.textLines = [WireTextLine.blank(lineNumber: 0)]
@@ -775,7 +826,7 @@ final class AppModel: ObservableObject {
         return false
     }
 
-    // MARK: - Export
+    // MARK: - Export / project bundle
 
     func exportSTL() {
         let panel = NSSavePanel()
@@ -803,6 +854,116 @@ final class AppModel: ObservableObject {
         do {
             let result = try await client.exportStl(model: model, path: url.path)
             statusText = "Exported \(result.triangleCount) triangles → \(url.lastPathComponent)"
+            statusIsError = false
+        } catch {
+            alertMessage = error.localizedDescription
+            statusText = error.localizedDescription
+            statusIsError = true
+        }
+    }
+
+    /// Portable `.mgproj` zip with parameters + assets (SVG/images/custom shape).
+    func exportProject() {
+        let panel = NSSavePanel()
+        if let t = UTType(filenameExtension: "mgproj") {
+            panel.allowedContentTypes = [t]
+        } else {
+            panel.allowedContentTypes = [.data]
+        }
+        let base = (model.name.isEmpty || model.name == "Untitled") ? "project" : model.name
+        panel.nameFieldStringValue = base + ".mgproj"
+        panel.canCreateDirectories = true
+        panel.title = "Export Project"
+        panel.message = "Self-contained project bundle (.mgproj)"
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task { await exportProject(to: url) }
+    }
+
+    private func exportProject(to url: URL) async {
+        guard let client else {
+            alertMessage = "Host not connected"
+            return
+        }
+        isBusy = true
+        defer { isBusy = false }
+        do {
+            let result = try await client.exportProject(
+                model: model,
+                path: url.path,
+                appVersion: HelpContent.appVersion
+            )
+            let kb = max(1, result.bytes / 1024)
+            statusText = "Exported project → \(url.lastPathComponent) (\(kb) KB)"
+            statusIsError = false
+        } catch {
+            alertMessage = error.localizedDescription
+            statusText = error.localizedDescription
+            statusIsError = true
+        }
+    }
+
+    func importProjectFromPanel() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        if let t = UTType(filenameExtension: "mgproj") {
+            panel.allowedContentTypes = [t]
+        }
+        panel.message = "Import a portable .mgproj project bundle"
+        panel.title = "Import Project"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task { await importProject(from: url) }
+    }
+
+    private func importProject(from url: URL) async {
+        guard let client else {
+            alertMessage = "Host not connected"
+            return
+        }
+        isBusy = true
+        defer { isBusy = false }
+        do {
+            var loaded = try await client.importProject(path: url.path)
+            for i in loaded.textLines.indices {
+                loaded.textLines[i].fontName = FontCatalog.resolve(loaded.textLines[i].fontName)
+                loaded.textLines[i].id = UUID()
+            }
+            for i in loaded.svgInserts.indices {
+                loaded.svgInserts[i].id = UUID()
+            }
+            for i in loaded.imageInserts.indices {
+                loaded.imageInserts[i].id = UUID()
+            }
+            for i in loaded.borderTextLines.indices {
+                loaded.borderTextLines[i].fontName = FontCatalog.resolve(loaded.borderTextLines[i].fontName)
+                loaded.borderTextLines[i].id = UUID()
+            }
+            if loaded.textLines.isEmpty {
+                loaded.textLines = [WireTextLine.blank(lineNumber: 0)]
+            }
+            loaded.id = 0
+            if loaded.name.isEmpty {
+                loaded.name = "Untitled"
+            }
+
+            isRestoringState = true
+            model = loaded
+            isRestoringState = false
+            undoStack.clear()
+            undoBurstPending = false
+            lastCommittedModel = model.deepCopy()
+            isDirty = false
+            refreshUndoFlags()
+            selectedKind = nil
+            selectedIndex = nil
+            if model.shapeType == ShapeTypeOption.customSvg.rawValue {
+                await refreshCustomShapeThumbnail()
+            } else {
+                customShapeThumbnail = nil
+            }
+            await regenerate()
+            statusText = "Imported project '\(model.name)'."
             statusIsError = false
         } catch {
             alertMessage = error.localizedDescription
@@ -910,6 +1071,32 @@ extension AppModel {
         )
     }
 
+    func borderTextLineBinding(at index: Int) -> Binding<WireBorderTextLine> {
+        Binding(
+            get: {
+                guard self.model.borderTextLines.indices.contains(index) else {
+                    return WireBorderTextLine.blank()
+                }
+                return self.model.borderTextLines[index]
+            },
+            set: { newValue in
+                self.noteEdit {
+                    guard self.model.borderTextLines.indices.contains(index) else { return }
+                    var line = newValue
+                    line.lineNumber = index
+                    line.fontName = FontCatalog.resolve(line.fontName)
+                    line.fontSize = min(100, max(2, line.fontSize))
+                    line.height = min(20, max(0.2, line.height))
+                    line.anchorAngleDegrees = min(360, max(-360, line.anchorAngleDegrees))
+                    if line.mode != BorderTextModeOption.engraved.rawValue {
+                        line.mode = BorderTextModeOption.embossed.rawValue
+                    }
+                    self.model.borderTextLines[index] = line
+                }
+            }
+        )
+    }
+
     func svgInsertBinding(at index: Int) -> Binding<WireSvgInsert> {
         Binding(
             get: {
@@ -955,10 +1142,12 @@ extension AppModel {
 
 extension Color {
     init(argb: Int) {
-        let a = Double((argb >> 24) & 0xFF) / 255.0
-        let r = Double((argb >> 16) & 0xFF) / 255.0
-        let g = Double((argb >> 8) & 0xFF) / 255.0
-        let b = Double(argb & 0xFF) / 255.0
+        // Signed ARGB from Core (e.g. LightSteelBlue = -5192482) — use 32-bit pattern.
+        let u = UInt32(bitPattern: Int32(truncatingIfNeeded: argb))
+        let a = Double((u >> 24) & 0xFF) / 255.0
+        let r = Double((u >> 16) & 0xFF) / 255.0
+        let g = Double((u >> 8) & 0xFF) / 255.0
+        let b = Double(u & 0xFF) / 255.0
         self.init(.sRGB, red: r, green: g, blue: b, opacity: a == 0 ? 1 : a)
     }
 
@@ -975,11 +1164,27 @@ extension Color {
 }
 
 /// Bridges SwiftUI AppModel to NSApplication terminate handling.
+/// Also promotes the SPM/`swift run` process to a real foreground app so TextFields
+/// receive keystrokes instead of the launching terminal (stdout echo).
 @MainActor
 final class MacAppSupport: NSObject, NSApplicationDelegate {
     weak var appModel: AppModel?
     /// Set true after user confirms discard/save so the second terminate attempt proceeds.
     static var allowTerminate = false
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // .accessory / default for raw executables keeps keystrokes on the terminal.
+        NSApp.setActivationPolicy(.regular)
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.activate(ignoringOtherApps: true)
+        // Re-activate once the first window is on screen (swift run race).
+        DispatchQueue.main.async {
+            NSApp.activate(ignoringOtherApps: true)
+            NSApp.windows.forEach { $0.makeKeyAndOrderFront(nil) }
+        }
+    }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if Self.allowTerminate { return .terminateNow }

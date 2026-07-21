@@ -11,6 +11,7 @@ struct SceneViewportView: View {
             dragPlaneZ: appModel.model.shapeThickness,
             selectedKind: appModel.selectedKind,
             selectedIndex: appModel.selectedIndex,
+            statusHint: statusHint,
             onSelect: { kind, index in
                 appModel.setSelection(kind: kind, index: index)
             },
@@ -18,7 +19,7 @@ struct SceneViewportView: View {
                 appModel.applyItemDrag(kind: kind, index: index, x: x, y: y, z: z)
             }
         )
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(Color(nsColor: .underPageBackgroundColor))
         .overlay(alignment: .topLeading) {
             Text("3D Preview — drag text/SVG/images to reposition")
                 .font(.caption)
@@ -26,6 +27,26 @@ struct SceneViewportView: View {
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6))
                 .padding(8)
         }
+        .overlay(alignment: .bottomLeading) {
+            if let statusHint {
+                Text(statusHint)
+                    .font(.caption)
+                    .foregroundStyle(appModel.statusIsError ? Color.red : Color.secondary)
+                    .padding(8)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6))
+                    .padding(8)
+            }
+        }
+    }
+
+    private var statusHint: String? {
+        if appModel.parts == nil {
+            return appModel.statusIsError ? appModel.statusText : "Waiting for preview…"
+        }
+        if let parts = appModel.parts, parts.triangleCount == 0 {
+            return "Preview empty (0 triangles)"
+        }
+        return nil
     }
 }
 
@@ -35,49 +56,62 @@ struct SceneKitView: NSViewRepresentable {
     var dragPlaneZ: Float
     var selectedKind: DraggableKind?
     var selectedIndex: Int?
+    var statusHint: String?
     var onSelect: (DraggableKind?, Int?) -> Void
     var onDrag: (DraggableKind, Int, Float, Float, Float) -> Void
 
     func makeNSView(context: Context) -> SCNView {
-        let view = SCNView()
-        view.scene = SCNScene()
-        view.backgroundColor = NSColor.underPageBackgroundColor
+        let view = SCNView(frame: NSRect(x: 0, y: 0, width: 640, height: 480))
+        let scene = SCNScene()
+        view.scene = scene
+        view.backgroundColor = NSColor.windowBackgroundColor
         view.allowsCameraControl = true
-        view.autoenablesDefaultLighting = false
+        view.autoenablesDefaultLighting = true
         view.antialiasingMode = .multisampling4X
+        view.rendersContinuously = true
 
+        // Core meshes sit in XY with thickness along +Z. Default camera looks along −Z (+Y up).
         let cameraNode = SCNNode()
         cameraNode.name = "camera"
         cameraNode.camera = SCNCamera()
+        cameraNode.camera?.zNear = 0.1
+        cameraNode.camera?.zFar = 10_000
         cameraNode.camera?.fieldOfView = 45
-        cameraNode.position = SCNVector3(0, 0, 300)
-        cameraNode.look(at: SCNVector3(0, 0, 0), up: SCNVector3(0, 1, 0), localFront: SCNVector3(0, 0, -1))
-        view.scene?.rootNode.addChildNode(cameraNode)
+        cameraNode.position = SCNVector3(0, 0, 200)
+        scene.rootNode.addChildNode(cameraNode)
         view.pointOfView = cameraNode
 
         let ambient = SCNNode()
+        ambient.name = "ambientLight"
         ambient.light = SCNLight()
         ambient.light?.type = .ambient
-        ambient.light?.color = NSColor(calibratedWhite: 0.35, alpha: 1)
-        view.scene?.rootNode.addChildNode(ambient)
+        ambient.light?.intensity = 400
+        ambient.light?.color = NSColor.white
+        scene.rootNode.addChildNode(ambient)
 
         let key = SCNNode()
+        key.name = "keyLight"
         key.light = SCNLight()
-        key.light?.type = .directional
-        key.light?.color = NSColor.white
-        key.eulerAngles = SCNVector3(-0.8, 0.4, 0)
-        view.scene?.rootNode.addChildNode(key)
+        key.light?.type = .omni
+        key.light?.intensity = 900
+        key.position = SCNVector3(80, 120, 200)
+        scene.rootNode.addChildNode(key)
 
         let fill = SCNNode()
+        fill.name = "fillLight"
         fill.light = SCNLight()
-        fill.light?.type = .directional
-        fill.light?.color = NSColor(calibratedWhite: 0.25, alpha: 1)
-        fill.eulerAngles = SCNVector3(0.5, -0.6, 0.2)
-        view.scene?.rootNode.addChildNode(fill)
+        fill.light?.type = .omni
+        fill.light?.intensity = 400
+        fill.position = SCNVector3(-100, -60, 150)
+        scene.rootNode.addChildNode(fill)
 
-        context.coordinator.modelRoot = SCNNode()
-        context.coordinator.modelRoot.name = "modelRoot"
-        view.scene?.rootNode.addChildNode(context.coordinator.modelRoot)
+        let modelRoot = SCNNode()
+        modelRoot.name = "modelRoot"
+        scene.rootNode.addChildNode(modelRoot)
+        context.coordinator.modelRoot = modelRoot
+        context.coordinator.scnView = view
+        // Force geometry rebuild even if parts identity matches a previous view instance.
+        context.coordinator.invalidateGeometryCache()
 
         context.coordinator.attachGestures(to: view)
         context.coordinator.onSelect = onSelect
@@ -91,6 +125,11 @@ struct SceneKitView: NSViewRepresentable {
         context.coordinator.onSelect = onSelect
         context.coordinator.onDrag = onDrag
         context.coordinator.dragPlaneZ = dragPlaneZ
+        // If SwiftUI recreated the NSView, re-bind the coordinator.
+        if context.coordinator.scnView !== view {
+            context.coordinator.scnView = view
+            context.coordinator.invalidateGeometryCache()
+        }
         context.coordinator.apply(
             parts: parts,
             selectedKind: selectedKind,
@@ -109,55 +148,127 @@ struct SceneKitView: NSViewRepresentable {
         var onSelect: (DraggableKind?, Int?) -> Void = { _, _ in }
         var onDrag: (DraggableKind, Int, Float, Float, Float) -> Void = { _, _, _, _, _ in }
 
-        private weak var scnView: SCNView?
+        weak var scnView: SCNView?
         private var selectionNode: SCNNode?
         private var isDragging = false
         private var dragKind: DraggableKind?
         private var dragIndex: Int = -1
-        private var lastParts: GeneratePartsResult?
+        /// Lightweight identity so we rebuild when mesh content changes without comparing megabytes of floats each frame.
+        private var lastPartsToken: String?
+        private var didFrameCamera = false
+
+        func invalidateGeometryCache() {
+            lastPartsToken = nil
+            didFrameCamera = false
+        }
 
         func attachGestures(to view: SCNView) {
             scnView = view
+            // Avoid stacking gesture recognizers if update re-attaches.
+            view.gestureRecognizers
+                .filter { $0 is NSClickGestureRecognizer || $0 is NSPanGestureRecognizer }
+                .forEach { view.removeGestureRecognizer($0) }
+
             let click = NSClickGestureRecognizer(target: self, action: #selector(handleClick(_:)))
             view.addGestureRecognizer(click)
 
             let pan = NSPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
-            pan.buttonMask = 0x1 // left button
+            pan.buttonMask = 0x1
             view.addGestureRecognizer(pan)
         }
 
         func apply(parts: GeneratePartsResult?, selectedKind: DraggableKind?, selectedIndex: Int?) {
-            // Rebuild when mesh content changes (including reposition after drag).
-            if parts != lastParts {
-                lastParts = parts
+            let token = Self.partsToken(parts)
+            let needsRebuild = token != lastPartsToken || modelRoot.parent == nil
+            if needsRebuild {
+                lastPartsToken = token
+                // Ensure modelRoot is attached to the live scene.
+                if modelRoot.parent == nil, let scene = scnView?.scene {
+                    scene.rootNode.childNode(withName: "modelRoot", recursively: false)?.removeFromParentNode()
+                    scene.rootNode.addChildNode(modelRoot)
+                }
                 modelRoot.childNodes.forEach { $0.removeFromParentNode() }
                 selectionNode = nil
+                didFrameCamera = false
+
                 if let parts {
-                    if let floor = makeGeometryNode(mesh: parts.floor, name: "floor", draggable: false) {
+                    if let floor = makeGeometryNode(mesh: parts.floor, name: "floor") {
                         modelRoot.addChildNode(floor)
                     }
-                    if let border = makeGeometryNode(mesh: parts.border, name: "border", draggable: false) {
+                    if let border = makeGeometryNode(mesh: parts.border, name: "border") {
                         modelRoot.addChildNode(border)
                     }
                     for item in parts.textMeshes {
-                        if let node = makeGeometryNode(mesh: item.mesh, name: "text-\(item.index)", draggable: true) {
+                        if let node = makeGeometryNode(mesh: item.mesh, name: "text-\(item.index)") {
                             modelRoot.addChildNode(node)
                         }
                     }
                     for item in parts.svgMeshes {
-                        if let node = makeGeometryNode(mesh: item.mesh, name: "svg-\(item.index)", draggable: true) {
+                        if let node = makeGeometryNode(mesh: item.mesh, name: "svg-\(item.index)") {
                             modelRoot.addChildNode(node)
                         }
                     }
                     for item in parts.imageMeshes {
-                        if let node = makeGeometryNode(mesh: item.mesh, name: "image-\(item.index)", draggable: true) {
+                        if let node = makeGeometryNode(mesh: item.mesh, name: "image-\(item.index)") {
                             modelRoot.addChildNode(node)
                         }
                     }
+                    for item in parts.borderTextMeshes {
+                        if let node = makeGeometryNode(mesh: item.mesh, name: "borderText-\(item.index)") {
+                            modelRoot.addChildNode(node)
+                        }
+                    }
+
+                    // Bounding boxes can be stale until the next layout pass.
+                    DispatchQueue.main.async { [weak self] in
+                        self?.frameCameraIfNeeded()
+                    }
+                    frameCameraIfNeeded()
                 }
             }
 
             updateSelectionVisual(kind: selectedKind, index: selectedIndex)
+        }
+
+        private static func partsToken(_ parts: GeneratePartsResult?) -> String {
+            guard let parts else { return "nil" }
+            // Content hash without comparing full vertex arrays for equality each frame.
+            return "\(parts.vertexCount)|\(parts.triangleCount)|\(parts.floor.vertices.count)|\(parts.border.vertices.count)|\(parts.textMeshes.count)|\(parts.svgMeshes.count)|\(parts.imageMeshes.count)|\(parts.borderTextMeshes.count)|\(parts.floor.colorArgb)|\(parts.border.colorArgb)"
+        }
+
+        /// Place a top-down camera so the whole model is visible.
+        private func frameCameraIfNeeded() {
+            guard let view = scnView, !didFrameCamera else { return }
+            // Prefer union of child geometry bounds (more reliable than empty parent bbox).
+            var minB = SCNVector3(CGFloat.greatestFiniteMagnitude, CGFloat.greatestFiniteMagnitude, CGFloat.greatestFiniteMagnitude)
+            var maxB = SCNVector3(-CGFloat.greatestFiniteMagnitude, -CGFloat.greatestFiniteMagnitude, -CGFloat.greatestFiniteMagnitude)
+            var any = false
+            for child in modelRoot.childNodes where child.geometry != nil {
+                let (cmin, cmax) = child.boundingBox
+                minB.x = min(minB.x, cmin.x); minB.y = min(minB.y, cmin.y); minB.z = min(minB.z, cmin.z)
+                maxB.x = max(maxB.x, cmax.x); maxB.y = max(maxB.y, cmax.y); maxB.z = max(maxB.z, cmax.z)
+                any = true
+            }
+            if !any {
+                (minB, maxB) = modelRoot.boundingBox
+            }
+
+            let dx = maxB.x - minB.x
+            let dy = maxB.y - minB.y
+            let dz = maxB.z - minB.z
+            if dx < 1e-4 && dy < 1e-4 && dz < 1e-4 { return }
+
+            let cx = (minB.x + maxB.x) * 0.5
+            let cy = (minB.y + maxB.y) * 0.5
+            let cz = (minB.z + maxB.z) * 0.5
+            let radius = CGFloat(max(dx, max(dy, dz))) * 0.5
+            let distance = max(radius * 3.2, 40)
+
+            if let cam = view.pointOfView {
+                cam.position = SCNVector3(cx, cy, cz + distance)
+                cam.look(at: SCNVector3(cx, cy, cz), up: SCNVector3(0, 1, 0), localFront: SCNVector3(0, 0, -1))
+            }
+            didFrameCamera = true
         }
 
         private func updateSelectionVisual(kind: DraggableKind?, index: Int?) {
@@ -165,7 +276,7 @@ struct SceneKitView: NSViewRepresentable {
             selectionNode = nil
             guard let kind, let index else { return }
             let name = nodeName(kind: kind, index: index)
-            guard let target = modelRoot.childNode(withName: name, recursively: false) else { return }
+            guard let target = modelRoot.childNode(withName: name, recursively: true) else { return }
 
             let bounds = target.boundingBox
             let sizeX = bounds.max.x - bounds.min.x
@@ -240,8 +351,7 @@ struct SceneKitView: NSViewRepresentable {
 
         private func hitDraggable(at point: NSPoint, in view: SCNView) -> (kind: DraggableKind, index: Int)? {
             let hits = view.hitTest(point, options: [
-                .searchMode: SCNHitTestSearchMode.all.rawValue,
-                .boundingBoxOnly: false
+                .searchMode: SCNHitTestSearchMode.all.rawValue
             ])
             for hit in hits {
                 var node: SCNNode? = hit.node
@@ -255,26 +365,21 @@ struct SceneKitView: NSViewRepresentable {
             return nil
         }
 
-        /// Ray from camera through point, intersect plane Z = dragPlaneZ (world).
         private func unprojectToDragPlane(point: NSPoint, in view: SCNView) -> (x: Float, y: Float, z: Float)? {
-            guard let cameraNode = view.pointOfView else { return nil }
-
-            // Near/far points in world space
             let near = view.unprojectPoint(SCNVector3(point.x, point.y, 0))
             let far = view.unprojectPoint(SCNVector3(point.x, point.y, 1))
             let dir = SCNVector3(far.x - near.x, far.y - near.y, far.z - near.z)
             let planeZ = CGFloat(dragPlaneZ)
 
-            // near.z + t * dir.z = planeZ
             if abs(dir.z) < 1e-8 { return nil }
             let t = (planeZ - near.z) / dir.z
             if t < 0 { return nil }
 
-            let x = Float(near.x + t * dir.x)
-            let y = Float(near.y + t * dir.y)
-            let z = Float(planeZ)
-            _ = cameraNode
-            return (x, y, z)
+            return (
+                Float(near.x + t * dir.x),
+                Float(near.y + t * dir.y),
+                Float(planeZ)
+            )
         }
 
         private func parseDraggableName(_ name: String?) -> (kind: DraggableKind, index: Int)? {
@@ -293,29 +398,16 @@ struct SceneKitView: NSViewRepresentable {
             "\(kind.rawValue)-\(index)"
         }
 
-        private func makeGeometryNode(mesh: WireMesh, name: String, draggable: Bool) -> SCNNode? {
+        /// Build geometry with explicit float data buffers (reliable across SceneKit versions).
+        private func makeGeometryNode(mesh: WireMesh, name: String) -> SCNNode? {
             guard mesh.vertices.count >= 9, mesh.indices.count >= 3 else { return nil }
             guard mesh.vertices.count % 3 == 0 else { return nil }
-
             let vertexCount = mesh.vertices.count / 3
-            let positionFloats = mesh.vertices
-            var normalFloats = mesh.normals
-            if normalFloats.count < positionFloats.count {
-                normalFloats.append(contentsOf: Array(repeating: Float(0), count: positionFloats.count - normalFloats.count))
-                for i in 0..<vertexCount {
-                    let base = i * 3
-                    if base + 2 < mesh.normals.count { continue }
-                    normalFloats[base] = 0
-                    normalFloats[base + 1] = 0
-                    normalFloats[base + 2] = 1
-                }
-            }
+            guard mesh.indices.allSatisfy({ $0 >= 0 && $0 < vertexCount }) else { return nil }
 
-            let positionData = positionFloats.withUnsafeBufferPointer { Data(buffer: $0) }
-            let normalData = normalFloats.withUnsafeBufferPointer { Data(buffer: $0) }
-
+            let vertexData = mesh.vertices.withUnsafeBufferPointer { Data(buffer: $0) }
             let positionSource = SCNGeometrySource(
-                data: positionData,
+                data: vertexData,
                 semantic: .vertex,
                 vectorCount: vertexCount,
                 usesFloatComponents: true,
@@ -324,6 +416,17 @@ struct SceneKitView: NSViewRepresentable {
                 dataOffset: 0,
                 dataStride: MemoryLayout<Float>.size * 3
             )
+
+            let normals: [Float]
+            if mesh.normals.count == mesh.vertices.count {
+                normals = mesh.normals
+            } else {
+                // Flat +Z fallback when host omits normals.
+                var n = [Float](repeating: 0, count: mesh.vertices.count)
+                for i in stride(from: 2, to: n.count, by: 3) { n[i] = 1 }
+                normals = n
+            }
+            let normalData = normals.withUnsafeBufferPointer { Data(buffer: $0) }
             let normalSource = SCNGeometrySource(
                 data: normalData,
                 semantic: .normal,
@@ -335,25 +438,26 @@ struct SceneKitView: NSViewRepresentable {
                 dataStride: MemoryLayout<Float>.size * 3
             )
 
-            var indices32 = mesh.indices.map { Int32($0) }
-            let indexData = Data(bytes: &indices32, count: MemoryLayout<Int32>.size * indices32.count)
+            let indices32 = mesh.indices.map { UInt32(clamping: $0) }
+            let indexData = indices32.withUnsafeBufferPointer { Data(buffer: $0) }
             let element = SCNGeometryElement(
                 data: indexData,
                 primitiveType: .triangles,
                 primitiveCount: indices32.count / 3,
-                bytesPerIndex: MemoryLayout<Int32>.size
+                bytesPerIndex: MemoryLayout<UInt32>.size
             )
 
             let geometry = SCNGeometry(sources: [positionSource, normalSource], elements: [element])
             let material = SCNMaterial()
             material.diffuse.contents = NSColor(argb: mesh.colorArgb)
+            material.ambient.contents = NSColor(argb: mesh.colorArgb)
             material.lightingModel = .blinn
             material.isDoubleSided = true
+            material.locksAmbientWithDiffuse = true
             geometry.materials = [material]
 
             let node = SCNNode(geometry: geometry)
             node.name = name
-            node.categoryBitMask = draggable ? 2 : 1
             return node
         }
     }
@@ -361,10 +465,12 @@ struct SceneKitView: NSViewRepresentable {
 
 private extension NSColor {
     convenience init(argb: Int) {
-        let a = CGFloat((argb >> 24) & 0xFF) / 255.0
-        let r = CGFloat((argb >> 16) & 0xFF) / 255.0
-        let g = CGFloat((argb >> 8) & 0xFF) / 255.0
-        let b = CGFloat(argb & 0xFF) / 255.0
+        // Core stores signed ARGB ints (e.g. LightSteelBlue = -5192482).
+        let u = UInt32(bitPattern: Int32(truncatingIfNeeded: argb))
+        let a = CGFloat((u >> 24) & 0xFF) / 255.0
+        let r = CGFloat((u >> 16) & 0xFF) / 255.0
+        let g = CGFloat((u >> 8) & 0xFF) / 255.0
+        let b = CGFloat(u & 0xFF) / 255.0
         self.init(srgbRed: r, green: g, blue: b, alpha: a == 0 ? 1 : a)
     }
 }

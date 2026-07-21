@@ -18,6 +18,7 @@ struct WireModel: Codable, Equatable {
     var textLines: [WireTextLine] = []
     var svgInserts: [WireSvgInsert] = []
     var imageInserts: [WireImageInsert] = []
+    var borderTextLines: [WireBorderTextLine] = []
 
     /// Deep copy via JSON (used for undo snapshots).
     func deepCopy() -> WireModel {
@@ -36,6 +37,7 @@ struct WireModel: Codable, Equatable {
         m.id = 0
         m.name = "Untitled"
         m.textLines = [WireTextLine.blank(lineNumber: 0)]
+        m.borderTextLines = []
         return m
     }
 }
@@ -88,6 +90,59 @@ struct WireTextLine: Codable, Equatable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case lineNumber, content, fontName, fontSize, textHeight
         case positionMode, positionX, positionY, positionZ, rotationZ, colorArgb
+    }
+}
+
+/// Border-following text (coin-rim lettering). Matches Core `BorderTextLine`.
+struct WireBorderTextLine: Codable, Equatable, Identifiable {
+    var id: UUID = UUID()
+
+    var lineNumber: Int = 0
+    var content: String = ""
+    var fontName: String = "Arial"
+    var fontSize: Float = 8
+    /// Emboss protrusion above border top, or engrave depth (mm).
+    var height: Float = 1.5
+    /// 0 = embossed, 1 = engraved.
+    var mode: Int = 0
+    /// Center of the text span on the border; 0° = +X, CCW; 90° = top.
+    var anchorAngleDegrees: Float = 90
+    var colorArgb: Int = -29_696 // DarkOrange
+
+    enum CodingKeys: String, CodingKey {
+        case lineNumber, content, fontName, fontSize, height, mode, anchorAngleDegrees, colorArgb
+    }
+
+    var modeOption: BorderTextModeOption {
+        get { BorderTextModeOption(rawValue: mode) ?? .embossed }
+        set { mode = newValue.rawValue }
+    }
+
+    static func blank(lineNumber: Int = 0) -> WireBorderTextLine {
+        var line = WireBorderTextLine()
+        line.lineNumber = lineNumber
+        line.content = ""
+        line.fontName = FontCatalog.preferredDefaultFamily
+        line.fontSize = 8
+        line.height = 1.5
+        line.mode = BorderTextModeOption.embossed.rawValue
+        line.anchorAngleDegrees = 90
+        line.colorArgb = -29_696
+        return line
+    }
+}
+
+enum BorderTextModeOption: Int, CaseIterable, Identifiable, CustomStringConvertible {
+    case embossed = 0
+    case engraved = 1
+
+    var id: Int { rawValue }
+
+    var description: String {
+        switch self {
+        case .embossed: return "Embossed"
+        case .engraved: return "Engraved"
+        }
     }
 }
 
@@ -279,6 +334,7 @@ struct GeneratePartsResult: Codable, Equatable {
     var textMeshes: [WirePositionedMesh] = []
     var svgMeshes: [WirePositionedMesh] = []
     var imageMeshes: [WirePositionedMesh] = []
+    var borderTextMeshes: [WirePositionedMesh] = []
     var vertexCount: Int = 0
     var triangleCount: Int = 0
 }
@@ -299,6 +355,15 @@ struct ExportStlResult: Codable {
     var bytes: Int64
     var vertexCount: Int
     var triangleCount: Int
+}
+
+struct ExportProjectResult: Codable {
+    var path: String
+    var bytes: Int64
+}
+
+struct ImportProjectResult: Codable {
+    var model: WireModel
 }
 
 enum ShapeTypeOption: Int, CaseIterable, Identifiable, CustomStringConvertible {

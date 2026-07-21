@@ -129,6 +129,45 @@ public class HostServiceTests : IDisposable
     }
 
     [Fact]
+    public void ExportImportProject_RoundTripsBorderText()
+    {
+        var model = new Model
+        {
+            Name = "MacBundle",
+            ShapeType = ShapeType.Circle,
+            ShapeSize = 60,
+            ShapeThickness = 10,
+            BorderThickness = 5,
+            BorderHeight = 5,
+            BorderTextLines =
+            {
+                new BorderTextLine
+                {
+                    LineNumber = 0,
+                    Content = "RIM",
+                    FontName = "Arial",
+                    FontSize = 8,
+                    Height = 1.5f,
+                    Mode = BorderTextMode.Embossed,
+                    AnchorAngleDegrees = 90
+                }
+            }
+        };
+
+        string path = Path.Combine(_tempDir, "mac-bundle.mgproj");
+        var exported = _service.ExportProject(model, path, "0.9.0-test");
+        Assert.True(File.Exists(exported.Path));
+        Assert.True(exported.Bytes > 0);
+
+        var imported = _service.ImportProject(path);
+        Assert.Equal(0, imported.Model.Id);
+        Assert.Equal("MacBundle", imported.Model.Name);
+        Assert.Single(imported.Model.BorderTextLines);
+        Assert.Equal("RIM", imported.Model.BorderTextLines[0].Content);
+        Assert.Equal(BorderTextMode.Embossed, imported.Model.BorderTextLines[0].Mode);
+    }
+
+    [Fact]
     public void JsonRpcSession_GenerateParts_ViaParamsModel()
     {
         var session = new JsonRpcSession(_service, Stream.Null, Stream.Null);
