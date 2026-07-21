@@ -61,6 +61,25 @@ public class SvgLibraryServiceTests : IDisposable
     }
 
     [Fact]
+    public void ImportContent_ThenListAndRead_RoundTrips()
+    {
+        string importedName = _service.ImportContent("badge.svg", SampleSvg);
+
+        Assert.Contains(importedName, _service.ListSvgFiles());
+        Assert.Equal(SampleSvg, _service.ReadSvgContent(importedName));
+    }
+
+    [Fact]
+    public void ImportContent_NameCollision_DedupesWithSuffix()
+    {
+        string firstName = _service.ImportContent("badge.svg", SampleSvg);
+        string secondName = _service.ImportContent("badge.svg", SampleSvg);
+
+        Assert.NotEqual(firstName, secondName);
+        Assert.Equal(2, _service.ListSvgFiles().Count);
+    }
+
+    [Fact]
     public void RenderThumbnail_ProducesNonEmptyPng()
     {
         byte[] png = _service.RenderThumbnail(SampleSvg, 64, 64);

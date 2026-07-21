@@ -196,6 +196,68 @@ public class SqliteModelRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveAndRetrieveModel_RoundTripsBorderTextLines()
+    {
+        var model = new Model
+        {
+            Name = "Rim Text Model",
+            ShapeType = ShapeType.Circle,
+            ShapeSize = 60,
+            BorderTextLines =
+            {
+                new BorderTextLine
+                {
+                    LineNumber = 0,
+                    Content = "ENGRAVED",
+                    FontName = "Arial",
+                    FontSize = 9,
+                    Height = 2,
+                    Mode = BorderTextMode.Engraved,
+                    AnchorAngleDegrees = 180,
+                    ColorArgb = -8388480
+                }
+            }
+        };
+
+        int id = await _repository.SaveModelAsync(model);
+        var loaded = await _repository.GetModelByIdAsync(id);
+
+        Assert.NotNull(loaded);
+        Assert.Single(loaded!.BorderTextLines);
+        var borderText = loaded.BorderTextLines[0];
+        Assert.Equal("ENGRAVED", borderText.Content);
+        Assert.Equal("Arial", borderText.FontName);
+        Assert.Equal(9, borderText.FontSize);
+        Assert.Equal(2, borderText.Height);
+        Assert.Equal(BorderTextMode.Engraved, borderText.Mode);
+        Assert.Equal(180, borderText.AnchorAngleDegrees);
+        Assert.Equal(-8388480, borderText.ColorArgb);
+    }
+
+    [Fact]
+    public async Task SaveModelAsync_OnUpdate_ReplacesBorderTextLinesLikeSvgInserts()
+    {
+        var model = new Model
+        {
+            Name = "Updatable Rim Text",
+            ShapeType = ShapeType.Circle,
+            ShapeSize = 60,
+            BorderTextLines = { new BorderTextLine { LineNumber = 0, Content = "OLD" } }
+        };
+        int id = await _repository.SaveModelAsync(model);
+
+        model.BorderTextLines.Clear();
+        model.BorderTextLines.Add(new BorderTextLine { LineNumber = 0, Content = "NEW" });
+        await _repository.SaveModelAsync(model);
+
+        var loaded = await _repository.GetModelByIdAsync(id);
+
+        Assert.NotNull(loaded);
+        Assert.Single(loaded!.BorderTextLines);
+        Assert.Equal("NEW", loaded.BorderTextLines[0].Content);
+    }
+
+    [Fact]
     public async Task SaveModelAsync_OnUpdate_ReplacesImageInsertsLikeSvgInserts()
     {
         byte[] imageData = CreateSampleImageBytes();

@@ -58,6 +58,29 @@ public class ImageLibraryServiceTests : IDisposable
     }
 
     [Fact]
+    public void ImportContent_ThenListAndRead_RoundTrips()
+    {
+        byte[] sampleImage = CreateSamplePng();
+
+        string importedName = _service.ImportContent("photo.png", sampleImage);
+
+        Assert.Contains(importedName, _service.ListImageFiles());
+        Assert.Equal(sampleImage, _service.ReadImageBytes(importedName));
+    }
+
+    [Fact]
+    public void ImportContent_NameCollision_DedupesWithSuffix()
+    {
+        byte[] sampleImage = CreateSamplePng();
+
+        string firstName = _service.ImportContent("photo.png", sampleImage);
+        string secondName = _service.ImportContent("photo.png", sampleImage);
+
+        Assert.NotEqual(firstName, secondName);
+        Assert.Equal(2, _service.ListImageFiles().Count);
+    }
+
+    [Fact]
     public void RenderThumbnail_ProducesNonEmptyPng()
     {
         byte[] sampleImage = CreateSamplePng();
