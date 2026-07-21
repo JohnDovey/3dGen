@@ -214,6 +214,7 @@ public class SqliteModelRepositoryTests : IDisposable
                     Height = 2,
                     Mode = BorderTextMode.Engraved,
                     AnchorAngleDegrees = 180,
+                    AnchorMode = BorderTextAnchorMode.Start,
                     ColorArgb = -8388480
                 }
             }
@@ -231,6 +232,7 @@ public class SqliteModelRepositoryTests : IDisposable
         Assert.Equal(2, borderText.Height);
         Assert.Equal(BorderTextMode.Engraved, borderText.Mode);
         Assert.Equal(180, borderText.AnchorAngleDegrees);
+        Assert.Equal(BorderTextAnchorMode.Start, borderText.AnchorMode);
         Assert.Equal(-8388480, borderText.ColorArgb);
     }
 

@@ -183,9 +183,13 @@ a coin):
 - **Mode → Engraved** — letters are cut into the border (a real recess).
 - **Size** is natural font size; if the string is too long to fit once around
   the rim, it shrinks just enough to close the loop. Short text leaves a gap.
-- **Anchor°** centers the span on the border (90° = top of the shape by default).
+- **Anchor°** places the span on the border (90° = top of the shape by default;
+  0° = +X axis, increasing counter-clockwise).
+- **Anchor is** controls what Anchor° marks: **Center** (the default — the span
+  is centered on that angle) or **Start** (the first character begins at that
+  angle and the text runs counter-clockwise from there).
 
-Border text is not dragged in the viewport — edit Anchor° numerically.
+Border text is not dragged in the viewport — edit Anchor°/Anchor is numerically.
 
 ## 7. Export and import a project
 

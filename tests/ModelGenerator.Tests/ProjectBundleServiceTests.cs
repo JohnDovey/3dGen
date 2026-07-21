@@ -60,7 +60,7 @@ public class ProjectBundleServiceTests : IDisposable
             },
             BorderTextLines =
             {
-                new BorderTextLine { LineNumber = 0, Content = "RIM", FontSize = 6, Height = 1, Mode = BorderTextMode.Embossed, AnchorAngleDegrees = 90 }
+                new BorderTextLine { LineNumber = 0, Content = "RIM", FontSize = 6, Height = 1, Mode = BorderTextMode.Embossed, AnchorAngleDegrees = 90, AnchorMode = BorderTextAnchorMode.Start }
             }
         };
 
@@ -81,6 +81,7 @@ public class ProjectBundleServiceTests : IDisposable
         Assert.Equal(png, loaded.ImageInserts[0].ImageData);
         Assert.Single(loaded.BorderTextLines);
         Assert.Equal("RIM", loaded.BorderTextLines[0].Content);
+        Assert.Equal(BorderTextAnchorMode.Start, loaded.BorderTextLines[0].AnchorMode);
     }
 
     [Fact]

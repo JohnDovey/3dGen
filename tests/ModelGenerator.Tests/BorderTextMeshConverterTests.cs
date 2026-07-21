@@ -73,4 +73,45 @@ public class BorderTextMeshConverterTests
             Assert.True(MathF.Abs(radialDistance - midlineRadius) <= bandWidth / 2f + 0.5f);
         }
     }
+
+    [Fact]
+    public void LayoutGlyphContours_StartAnchorMode_BeginsNearAnchorAngleInsteadOfCentering()
+    {
+        var model = new Model { ShapeType = ShapeType.Circle, ShapeSize = 80, BorderThickness = 5, BorderHeight = 3, ShapeThickness = 10 };
+        var (outer, inner) = _shapes.GenerateBorderOutline(model);
+        var (midline, length) = BorderTextMeshConverter.BuildMidline(outer, inner);
+        float bandWidth = BorderTextMeshConverter.BorderBandWidth(outer, inner);
+        var centroid = MeshMath.Centroid(midline);
+
+        // "IIII" — no glyph counters, so each character maps to exactly one contour, making the
+        // first character's contour unambiguous.
+        var centerLine = new BorderTextLine { Content = "IIII", FontName = "Arial", FontSize = 10, Mode = BorderTextMode.Engraved, AnchorAngleDegrees = 90, AnchorMode = BorderTextAnchorMode.Center };
+        var startLine = new BorderTextLine { Content = "IIII", FontName = "Arial", FontSize = 10, Mode = BorderTextMode.Engraved, AnchorAngleDegrees = 90, AnchorMode = BorderTextAnchorMode.Start };
+
+        var centerContours = _converter.LayoutGlyphContours(centerLine, midline, length, bandWidth);
+        var startContours = _converter.LayoutGlyphContours(startLine, midline, length, bandWidth);
+
+        Assert.Equal(4, centerContours.Count);
+        Assert.Equal(4, startContours.Count);
+
+        float centerFirstAngle = GlyphAngleDegrees(centerContours[0], centroid);
+        float startFirstAngle = GlyphAngleDegrees(startContours[0], centroid);
+
+        // In Start mode the first glyph should sit right at the anchor angle (90°); in Center
+        // mode the whole span (so the first glyph too) sits noticeably earlier than 90°.
+        Assert.True(AngularDistanceDegrees(startFirstAngle, 90f) < AngularDistanceDegrees(centerFirstAngle, 90f));
+    }
+
+    private static float GlyphAngleDegrees(IReadOnlyList<Vector2> glyphContour, Vector2 centroid)
+    {
+        var offset = MeshMath.Centroid(glyphContour) - centroid;
+        float angle = MathF.Atan2(offset.Y, offset.X) * 180f / MathF.PI;
+        return ((angle % 360f) + 360f) % 360f;
+    }
+
+    private static float AngularDistanceDegrees(float a, float b)
+    {
+        float diff = MathF.Abs(a - b) % 360f;
+        return diff > 180f ? 360f - diff : diff;
+    }
 }

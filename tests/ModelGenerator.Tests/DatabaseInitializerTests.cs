@@ -27,6 +27,62 @@ public class DatabaseInitializerTests : IDisposable
         Assert.True(TableExists("SvgInserts"));
         Assert.True(TableExists("ImageInserts"));
         Assert.True(TableExists("BorderTextLines"));
+        Assert.True(ColumnExists("BorderTextLines", "AnchorMode"));
+    }
+
+    [Fact]
+    public void Initialize_OnExistingPreAnchorModeDatabase_MigratesInPlaceWithoutDataLoss()
+    {
+        // Simulate a v0.9.0 database: BorderTextLines exists (with AnchorAngleDegrees) but
+        // predates the AnchorMode column.
+        new DatabaseInitializer(_connectionFactory).Initialize();
+        using (var connection = _connectionFactory.CreateConnection())
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "DROP TABLE BorderTextLines;";
+            command.ExecuteNonQuery();
+        }
+        using (var connection = _connectionFactory.CreateConnection())
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                CREATE TABLE BorderTextLines (
+                    BorderTextLineId INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ModelId INTEGER NOT NULL,
+                    LineNumber INTEGER NOT NULL,
+                    Content TEXT NOT NULL,
+                    FontName TEXT NOT NULL,
+                    FontSize REAL NOT NULL DEFAULT 8,
+                    Height REAL NOT NULL DEFAULT 1.5,
+                    Mode INTEGER NOT NULL DEFAULT 0,
+                    AnchorAngleDegrees REAL NOT NULL DEFAULT 90,
+                    ColorArgb INTEGER NOT NULL DEFAULT -29696,
+                    FOREIGN KEY (ModelId) REFERENCES Models(ModelId) ON DELETE CASCADE
+                );
+                """;
+            command.ExecuteNonQuery();
+        }
+
+        // Pre-existing data that must survive the migration.
+        using (var connection = _connectionFactory.CreateConnection())
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "INSERT INTO Models (Name, ShapeType, ShapeSize) VALUES ('Rim Text Model', 0, 60);";
+            command.ExecuteNonQuery();
+            command.CommandText = "INSERT INTO BorderTextLines (ModelId, LineNumber, Content, FontName) VALUES (1, 0, 'OLD', 'Arial');";
+            command.ExecuteNonQuery();
+        }
+
+        Assert.False(ColumnExists("BorderTextLines", "AnchorMode"));
+
+        new DatabaseInitializer(_connectionFactory).Initialize();
+
+        Assert.True(ColumnExists("BorderTextLines", "AnchorMode"));
+
+        using var verifyConnection = _connectionFactory.CreateConnection();
+        using var verifyCommand = verifyConnection.CreateCommand();
+        verifyCommand.CommandText = "SELECT Content FROM BorderTextLines WHERE ModelId = 1;";
+        Assert.Equal("OLD", verifyCommand.ExecuteScalar());
     }
 
     [Fact]

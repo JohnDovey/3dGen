@@ -104,6 +104,7 @@ public class DatabaseInitializer
                     Height REAL NOT NULL DEFAULT 1.5,
                     Mode INTEGER NOT NULL DEFAULT 0,
                     AnchorAngleDegrees REAL NOT NULL DEFAULT 90,
+                    AnchorMode INTEGER NOT NULL DEFAULT 0,
                     ColorArgb INTEGER NOT NULL DEFAULT {DarkOrangeArgb},
                     FOREIGN KEY (ModelId) REFERENCES Models(ModelId) ON DELETE CASCADE
                 );
@@ -130,6 +131,7 @@ public class DatabaseInitializer
         AddColumnIfMissing(connection, "TextLines", "ColorArgb", $"INTEGER NOT NULL DEFAULT {DarkOrangeArgb}");
         AddColumnIfMissing(connection, "Models", "CustomShapeSvgContent", "TEXT");
         AddColumnIfMissing(connection, "Models", "CustomShapeSourceFileName", "TEXT");
+        AddColumnIfMissing(connection, "BorderTextLines", "AnchorMode", "INTEGER NOT NULL DEFAULT 0");
     }
 
     private static void AddColumnIfMissing(SqliteConnection connection, string table, string column, string columnDefinition)

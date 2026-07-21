@@ -3,7 +3,7 @@ using ModelGenerator.Core.Models;
 
 namespace ModelGenerator.UI.Controls;
 
-/// <summary>One row of border-following text: content, font, size, height, embossed/engraved mode, anchor angle, color.</summary>
+/// <summary>One row of border-following text: content, font, size, height, embossed/engraved mode, anchor angle/mode, color.</summary>
 public class BorderTextLineEditorControl : UserControl
 {
     private static readonly string[] FontNames = LoadInstalledFontNames();
@@ -14,6 +14,7 @@ public class BorderTextLineEditorControl : UserControl
     private readonly NumericUpDown _heightInput = MakeNumeric(1.5m, min: 0.2m, max: 20, decimals: 1);
     private readonly ComboBox _modeCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 90 };
     private readonly NumericUpDown _anchorInput = MakeNumeric(90, min: -360, max: 360);
+    private readonly ComboBox _anchorModeCombo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 70 };
     private readonly Button _colorButton = new() { Text = "Color", Width = 50, AutoSize = false };
     private readonly Button _removeButton = new() { Text = "Remove", AutoSize = true };
 
@@ -32,6 +33,8 @@ public class BorderTextLineEditorControl : UserControl
         _fontCombo.SelectedIndex = Math.Max(0, Array.IndexOf(FontNames, "Arial"));
         _modeCombo.Items.AddRange(Enum.GetNames<BorderTextMode>());
         _modeCombo.SelectedIndex = 0;
+        _anchorModeCombo.Items.AddRange(Enum.GetNames<BorderTextAnchorMode>());
+        _anchorModeCombo.SelectedIndex = 0;
         UpdateColorButtonSwatch();
 
         var layout = new FlowLayoutPanel
@@ -48,6 +51,7 @@ public class BorderTextLineEditorControl : UserControl
         layout.Controls.Add(Labeled("Height (mm)", _heightInput));
         layout.Controls.Add(Labeled("Mode", _modeCombo));
         layout.Controls.Add(Labeled("Anchor°", _anchorInput));
+        layout.Controls.Add(Labeled("Anchor is", _anchorModeCombo));
         layout.Controls.Add(Labeled("Color", _colorButton));
         layout.Controls.Add(_removeButton);
 
@@ -61,6 +65,7 @@ public class BorderTextLineEditorControl : UserControl
         _heightInput.ValueChanged += (_, _) => RaiseChanged();
         _modeCombo.SelectedIndexChanged += (_, _) => RaiseChanged();
         _anchorInput.ValueChanged += (_, _) => RaiseChanged();
+        _anchorModeCombo.SelectedIndexChanged += (_, _) => RaiseChanged();
         _colorButton.Click += (_, _) => PickColor();
         _removeButton.Click += (_, _) => RemoveRequested?.Invoke(this, EventArgs.Empty);
     }
@@ -74,6 +79,7 @@ public class BorderTextLineEditorControl : UserControl
         Height = (float)_heightInput.Value,
         Mode = Enum.Parse<BorderTextMode>((string)_modeCombo.SelectedItem!),
         AnchorAngleDegrees = (float)_anchorInput.Value,
+        AnchorMode = Enum.Parse<BorderTextAnchorMode>((string)_anchorModeCombo.SelectedItem!),
         ColorArgb = _colorArgb
     };
 
@@ -86,6 +92,7 @@ public class BorderTextLineEditorControl : UserControl
         _heightInput.Value = ClampToRange(_heightInput, (decimal)line.Height);
         _modeCombo.SelectedIndex = (int)line.Mode;
         _anchorInput.Value = ClampToRange(_anchorInput, (decimal)line.AnchorAngleDegrees);
+        _anchorModeCombo.SelectedIndex = (int)line.AnchorMode;
         _colorArgb = line.ColorArgb;
         UpdateColorButtonSwatch();
     }

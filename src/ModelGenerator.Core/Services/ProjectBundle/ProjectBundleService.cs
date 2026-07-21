@@ -131,6 +131,7 @@ public sealed class ProjectBundleService : IProjectBundleService
                 Height = line.Height,
                 Mode = line.Mode,
                 AnchorAngleDegrees = line.AnchorAngleDegrees,
+                AnchorMode = line.AnchorMode,
                 ColorArgb = line.ColorArgb
             });
         }
@@ -257,6 +258,7 @@ public sealed class ProjectBundleService : IProjectBundleService
                 Height = b.Height,
                 Mode = b.Mode,
                 AnchorAngleDegrees = b.AnchorAngleDegrees,
+                AnchorMode = b.AnchorMode,
                 ColorArgb = b.ColorArgb
             });
         }

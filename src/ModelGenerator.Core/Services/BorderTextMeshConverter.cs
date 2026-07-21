@@ -122,11 +122,14 @@ public sealed class BorderTextMeshConverter : IBorderTextMeshConverter
             return Array.Empty<IReadOnlyList<Vector2>>();
         }
 
-        // Center the span on AnchorAngleDegrees (0 = +X, CCW).
+        // Place the span relative to AnchorAngleDegrees (0 = +X, CCW) — either centered on it, or
+        // starting at it (text then runs CCW from there).
         float anchorAngleRad = borderText.AnchorAngleDegrees * MathF.PI / 180f;
         // Sample a point on the approximate circle at that angle to find arc position via nearest point.
         float targetArc = ArcLengthAtAngle(borderMidline, cum, totalLen, anchorAngleRad);
-        float startArc = targetArc - spanWidth * 0.5f;
+        float startArc = borderText.AnchorMode == BorderTextAnchorMode.Start
+            ? targetArc
+            : targetArc - spanWidth * 0.5f;
         // Normalize into [0, totalLen)
         startArc = ((startArc % totalLen) + totalLen) % totalLen;
 

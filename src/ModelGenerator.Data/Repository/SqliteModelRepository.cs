@@ -222,9 +222,9 @@ public class SqliteModelRepository : IModelRepository
             insertBorder.Transaction = transaction;
             insertBorder.CommandText = """
                 INSERT INTO BorderTextLines
-                    (ModelId, LineNumber, Content, FontName, FontSize, Height, Mode, AnchorAngleDegrees, ColorArgb)
+                    (ModelId, LineNumber, Content, FontName, FontSize, Height, Mode, AnchorAngleDegrees, AnchorMode, ColorArgb)
                 VALUES
-                    (@modelId, @lineNumber, @content, @fontName, @fontSize, @height, @mode, @anchorAngleDegrees, @colorArgb);
+                    (@modelId, @lineNumber, @content, @fontName, @fontSize, @height, @mode, @anchorAngleDegrees, @anchorMode, @colorArgb);
                 """;
             insertBorder.Parameters.AddWithValue("@modelId", model.Id);
             insertBorder.Parameters.AddWithValue("@lineNumber", borderText.LineNumber);
@@ -234,6 +234,7 @@ public class SqliteModelRepository : IModelRepository
             insertBorder.Parameters.AddWithValue("@height", borderText.Height);
             insertBorder.Parameters.AddWithValue("@mode", (int)borderText.Mode);
             insertBorder.Parameters.AddWithValue("@anchorAngleDegrees", borderText.AnchorAngleDegrees);
+            insertBorder.Parameters.AddWithValue("@anchorMode", (int)borderText.AnchorMode);
             insertBorder.Parameters.AddWithValue("@colorArgb", borderText.ColorArgb);
             await insertBorder.ExecuteNonQueryAsync();
         }
@@ -433,6 +434,7 @@ public class SqliteModelRepository : IModelRepository
                     Height = (float)reader.GetDouble(reader.GetOrdinal("Height")),
                     Mode = (BorderTextMode)reader.GetInt32(reader.GetOrdinal("Mode")),
                     AnchorAngleDegrees = (float)reader.GetDouble(reader.GetOrdinal("AnchorAngleDegrees")),
+                    AnchorMode = (BorderTextAnchorMode)GetInt32OrDefault(reader, "AnchorMode", 0),
                     ColorArgb = GetInt32OrDefault(reader, "ColorArgb", DarkOrangeArgb)
                 });
             }

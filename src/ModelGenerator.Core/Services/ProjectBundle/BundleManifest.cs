@@ -81,5 +81,6 @@ public sealed class BundleBorderTextLine
     public float Height { get; set; } = 1.5f;
     public BorderTextMode Mode { get; set; }
     public float AnchorAngleDegrees { get; set; } = 90f;
+    public BorderTextAnchorMode AnchorMode { get; set; }
     public int ColorArgb { get; set; }
 }
