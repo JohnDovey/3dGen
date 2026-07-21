@@ -1,45 +1,46 @@
 import AppKit
-import Combine
 import Foundation
+import Observation
 import SwiftUI
 import UniformTypeIdentifiers
 
 @MainActor
-final class AppModel: ObservableObject {
-    @Published var model = WireModel.blankDocument()
-    @Published var parts: GeneratePartsResult?
-    @Published var statusText: String = "Starting…"
-    @Published var statusIsError: Bool = false
-    @Published var isBusy: Bool = false
-    @Published var hostVersion: String = ""
-    @Published var alertMessage: String?
-    @Published var isConnected: Bool = false
-    @Published var isDirty: Bool = false
-    @Published var canUndo: Bool = false
-    @Published var canRedo: Bool = false
-    @Published var showOpenSheet: Bool = false
-    @Published var showSaveNameSheet: Bool = false
-    @Published var saveNameDraft: String = ""
-    @Published var pendingDiscardAction: DiscardAction?
-    @Published var modelSummaries: [ModelSummary] = []
+@Observable
+final class AppModel {
+    var model = WireModel.blankDocument()
+    var parts: GeneratePartsResult?
+    var statusText: String = "Starting…"
+    var statusIsError: Bool = false
+    var isBusy: Bool = false
+    var hostVersion: String = ""
+    var alertMessage: String?
+    var isConnected: Bool = false
+    var isDirty: Bool = false
+    var canUndo: Bool = false
+    var canRedo: Bool = false
+    var showOpenSheet: Bool = false
+    var showSaveNameSheet: Bool = false
+    var saveNameDraft: String = ""
+    var pendingDiscardAction: DiscardAction?
+    var modelSummaries: [ModelSummary] = []
 
     // SVG library UI
-    @Published var showSvgLibrarySheet: Bool = false
-    @Published var svgLibraryPurpose: SvgLibraryPurpose = .insert
-    @Published var svgLibraryItems: [SvgLibraryItem] = []
-    @Published var svgLibraryQuery: String = ""
-    @Published var svgThumbnailCache: [String: Data] = [:]
-    @Published var customShapeThumbnail: Data?
+    var showSvgLibrarySheet: Bool = false
+    var svgLibraryPurpose: SvgLibraryPurpose = .insert
+    var svgLibraryItems: [SvgLibraryItem] = []
+    var svgLibraryQuery: String = ""
+    var svgThumbnailCache: [String: Data] = [:]
+    var customShapeThumbnail: Data?
 
     // Image library UI
-    @Published var showImageLibrarySheet: Bool = false
-    @Published var imageLibraryItems: [ImageLibraryItem] = []
-    @Published var imageLibraryQuery: String = ""
-    @Published var imageThumbnailCache: [String: Data] = [:]
+    var showImageLibrarySheet: Bool = false
+    var imageLibraryItems: [ImageLibraryItem] = []
+    var imageLibraryQuery: String = ""
+    var imageThumbnailCache: [String: Data] = [:]
 
     /// Viewport selection (nil = none).
-    @Published var selectedKind: DraggableKind?
-    @Published var selectedIndex: Int?
+    var selectedKind: DraggableKind?
+    var selectedIndex: Int?
 
     enum SvgLibraryPurpose {
         case insert
@@ -549,7 +550,8 @@ final class AppModel: ObservableObject {
     func scheduleRegenerate() {
         regenerateTask?.cancel()
         regenerateTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 120_000_000)
+            // Longer debounce so typing (and slider drags) coalesce into one Host call.
+            try? await Task.sleep(nanoseconds: 450_000_000)
             guard let self, !Task.isCancelled else { return }
             await self.regenerate()
         }
@@ -562,10 +564,11 @@ final class AppModel: ObservableObject {
             return
         }
 
-        isBusy = true
-        defer { isBusy = false }
+        // Do not toggle isBusy for live preview — it forces status/UI work on every keystroke
+        // after debounce and feels like the app freezes between letters.
 
         renumberTextLines()
+        renumberBorderTextLines()
 
         do {
             let result = try await client.generateParts(model: model)

@@ -181,17 +181,38 @@ actor HostClient {
         requestData.append(contentsOf: "\n".utf8)
 
         let responseData = try await send(requestData)
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let envelope = try decoder.decode(RpcResponseEnvelope.self, from: responseData)
-
-        if let error = envelope.error {
-            throw HostError.rpc(error.message)
+        // Slice result/error out with JSONSerialization — avoids re-encoding the whole
+        // generateParts mesh through a Double-only tree (multi‑MB, multi‑second).
+        let (errorMessage, resultData) = try Self.splitRpcResponse(responseData)
+        if let errorMessage {
+            throw HostError.rpc(errorMessage)
         }
-        guard let resultData = envelope.result else {
+        guard let resultData else {
             throw HostError.rpc("Missing result for \(method)")
         }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
         return try decoder.decode(R.self, from: resultData)
+    }
+
+    /// Extract `error.message` or raw `result` JSON bytes from an RPC response line.
+    private static func splitRpcResponse(_ responseData: Data) throws -> (error: String?, result: Data?) {
+        let obj = try JSONSerialization.jsonObject(with: responseData, options: [.fragmentsAllowed])
+        guard let root = obj as? [String: Any] else {
+            throw HostError.rpc("Invalid RPC response")
+        }
+        if let err = root["error"] as? [String: Any] {
+            let message = (err["message"] as? String) ?? "RPC error"
+            return (message, nil)
+        }
+        guard let result = root["result"] else {
+            return (nil, nil)
+        }
+        if result is NSNull {
+            return (nil, nil)
+        }
+        let data = try JSONSerialization.data(withJSONObject: result, options: [])
+        return (nil, data)
     }
 
     private func send(_ requestLine: Data) async throws -> Data {
@@ -275,65 +296,4 @@ private struct RpcRequest<P: Encodable>: Encodable {
     let id: String
     let method: String
     let params: P
-}
-
-private struct RpcErrorBody: Decodable {
-    let code: Int
-    let message: String
-}
-
-/// Result kept as raw JSON so we can decode into a concrete type.
-private struct RpcResponseEnvelope: Decodable {
-    let id: String?
-    let result: Data?
-    let error: RpcErrorBody?
-
-    enum CodingKeys: String, CodingKey {
-        case id, result, error
-    }
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = try c.decodeIfPresent(String.self, forKey: .id)
-        error = try c.decodeIfPresent(RpcErrorBody.self, forKey: .error)
-        if c.contains(.result), try c.decodeNil(forKey: .result) == false {
-            let value = try c.decode(JSONValue.self, forKey: .result)
-            result = try JSONEncoder().encode(value)
-        } else {
-            result = nil
-        }
-    }
-}
-
-/// Type-erased JSON for re-encoding result objects.
-private enum JSONValue: Codable {
-    case string(String)
-    case number(Double)
-    case bool(Bool)
-    case object([String: JSONValue])
-    case array([JSONValue])
-    case null
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.singleValueContainer()
-        if c.decodeNil() { self = .null; return }
-        if let b = try? c.decode(Bool.self) { self = .bool(b); return }
-        if let n = try? c.decode(Double.self) { self = .number(n); return }
-        if let s = try? c.decode(String.self) { self = .string(s); return }
-        if let a = try? c.decode([JSONValue].self) { self = .array(a); return }
-        if let o = try? c.decode([String: JSONValue].self) { self = .object(o); return }
-        throw DecodingError.dataCorruptedError(in: c, debugDescription: "Unsupported JSON")
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var c = encoder.singleValueContainer()
-        switch self {
-        case .string(let s): try c.encode(s)
-        case .number(let n): try c.encode(n)
-        case .bool(let b): try c.encode(b)
-        case .object(let o): try c.encode(o)
-        case .array(let a): try c.encode(a)
-        case .null: try c.encodeNil()
-        }
-    }
 }

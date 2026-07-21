@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct TextLinesPanelView: View {
-    @EnvironmentObject private var appModel: AppModel
+    @Environment(AppModel.self) private var appModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -40,10 +40,9 @@ struct TextLineEditorView: View {
     let index: Int
     @Binding var line: WireTextLine
     let canRemove: Bool
-    @EnvironmentObject private var appModel: AppModel
+    @Environment(AppModel.self) private var appModel
 
-    /// Local draft so keystrokes don't rewrite `@Published model` every character
-    /// (which rebuilds the field and steals focus / sends keys to the terminal).
+    /// Local draft so keystrokes don't rewrite model every character.
     @State private var contentDraft: String = ""
     @State private var contentCommitTask: Task<Void, Never>?
 
@@ -82,9 +81,7 @@ struct TextLineEditorView: View {
                     Text("Font").font(.caption).foregroundStyle(.secondary)
                     Picker("Font", selection: $line.fontName) {
                         ForEach(FontCatalog.families, id: \.self) { family in
-                            Text(family)
-                                .font(.custom(family, size: 12))
-                                .tag(family)
+                            Text(family).tag(family)
                         }
                     }
                     .labelsHidden()
@@ -172,7 +169,8 @@ struct TextLineEditorView: View {
     private func scheduleContentCommit(_ text: String) {
         contentCommitTask?.cancel()
         contentCommitTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 280_000_000)
+            // Wait until typing pauses before committing + regenerating mesh.
+            try? await Task.sleep(nanoseconds: 700_000_000)
             guard !Task.isCancelled else { return }
             applyContentIfNeeded(text)
         }

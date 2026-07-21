@@ -1,9 +1,11 @@
 import SwiftUI
 
 struct ContentView: View {
-    @EnvironmentObject private var appModel: AppModel
+    @Environment(AppModel.self) private var appModel
 
     var body: some View {
+        @Bindable var appModel = appModel
+
         VStack(spacing: 0) {
             HSplitView {
                 ShapeInspectorView()
@@ -42,34 +44,57 @@ struct ContentView: View {
         }
         .sheet(isPresented: $appModel.showOpenSheet) {
             OpenModelSheet()
-                .environmentObject(appModel)
+                .environment(appModel)
         }
         .sheet(isPresented: $appModel.showSvgLibrarySheet) {
             SvgLibrarySheet()
-                .environmentObject(appModel)
+                .environment(appModel)
         }
         .sheet(isPresented: $appModel.showImageLibrarySheet) {
             ImageLibrarySheet()
-                .environmentObject(appModel)
+                .environment(appModel)
         }
         .sheet(isPresented: $appModel.showSaveNameSheet) {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Save Model")
-                    .font(.headline)
-                TextField("Model name", text: $appModel.saveNameDraft)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit { appModel.confirmSaveName() }
-                HStack {
-                    Spacer()
-                    Button("Cancel") { appModel.cancelSaveName() }
-                        .keyboardShortcut(.cancelAction)
-                    Button("Save") { appModel.confirmSaveName() }
-                        .keyboardShortcut(.defaultAction)
-                        .buttonStyle(.borderedProminent)
-                }
-            }
-            .padding()
-            .frame(width: 360)
+            // Separate view + local draft so typing the name does not re-render the main UI.
+            SaveModelNameSheet()
+                .environment(appModel)
         }
+    }
+}
+
+/// Save-name UI keeps draft text in `@State` so keystrokes never touch AppModel until Save.
+private struct SaveModelNameSheet: View {
+    @Environment(AppModel.self) private var appModel
+    @State private var nameDraft: String = ""
+    @FocusState private var nameFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Save Model")
+                .font(.headline)
+            TextField("Model name", text: $nameDraft)
+                .textFieldStyle(.roundedBorder)
+                .focused($nameFocused)
+                .onSubmit { commit() }
+            HStack {
+                Spacer()
+                Button("Cancel") { appModel.cancelSaveName() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Save") { commit() }
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding()
+        .frame(width: 360)
+        .onAppear {
+            nameDraft = appModel.saveNameDraft
+            nameFocused = true
+        }
+    }
+
+    private func commit() {
+        appModel.saveNameDraft = nameDraft
+        appModel.confirmSaveName()
     }
 }

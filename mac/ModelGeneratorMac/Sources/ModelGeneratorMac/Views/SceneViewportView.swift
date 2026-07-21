@@ -3,7 +3,7 @@ import SceneKit
 import SwiftUI
 
 struct SceneViewportView: View {
-    @EnvironmentObject private var appModel: AppModel
+    @Environment(AppModel.self) private var appModel
 
     var body: some View {
         SceneKitView(

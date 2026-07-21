@@ -2,12 +2,14 @@ import AppKit
 import SwiftUI
 
 struct ImageLibrarySheet: View {
-    @EnvironmentObject private var appModel: AppModel
+    @Environment(AppModel.self) private var appModel
     @Environment(\.dismiss) private var dismiss
     @State private var tagsDraft: String = ""
     @State private var taggingFileName: String?
 
     var body: some View {
+        @Bindable var appModel = appModel
+
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Insert image bas-relief")

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct BorderTextLinesPanelView: View {
-    @EnvironmentObject private var appModel: AppModel
+    @Environment(AppModel.self) private var appModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -44,7 +44,7 @@ struct BorderTextLineEditorView: View {
     let index: Int
     @Binding var line: WireBorderTextLine
     let canRemove: Bool
-    @EnvironmentObject private var appModel: AppModel
+    @Environment(AppModel.self) private var appModel
 
     @State private var contentDraft: String = ""
     @State private var contentCommitTask: Task<Void, Never>?
@@ -84,9 +84,7 @@ struct BorderTextLineEditorView: View {
                     Text("Font").font(.caption).foregroundStyle(.secondary)
                     Picker("Font", selection: $line.fontName) {
                         ForEach(FontCatalog.families, id: \.self) { family in
-                            Text(family)
-                                .font(.custom(family, size: 12))
-                                .tag(family)
+                            Text(family).tag(family)
                         }
                     }
                     .labelsHidden()
@@ -179,7 +177,7 @@ struct BorderTextLineEditorView: View {
     private func scheduleContentCommit(_ text: String) {
         contentCommitTask?.cancel()
         contentCommitTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 280_000_000)
+            try? await Task.sleep(nanoseconds: 700_000_000)
             guard !Task.isCancelled else { return }
             applyContentIfNeeded(text)
         }

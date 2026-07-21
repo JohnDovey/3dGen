@@ -4,14 +4,14 @@ import SwiftUI
 @main
 struct ModelGeneratorMacApp: App {
     @NSApplicationDelegateAdaptor(MacAppSupport.self) private var appDelegate
-    @StateObject private var appModel = AppModel()
+    @State private var appModel = AppModel()
     @State private var showHelp = false
     @State private var showAbout = false
 
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environmentObject(appModel)
+                .environment(appModel)
                 .frame(minWidth: 1000, minHeight: 640)
                 .onAppear {
                     appDelegate.appModel = appModel

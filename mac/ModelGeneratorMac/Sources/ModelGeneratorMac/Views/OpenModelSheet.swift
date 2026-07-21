@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct OpenModelSheet: View {
-    @EnvironmentObject private var appModel: AppModel
+    @Environment(AppModel.self) private var appModel
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {

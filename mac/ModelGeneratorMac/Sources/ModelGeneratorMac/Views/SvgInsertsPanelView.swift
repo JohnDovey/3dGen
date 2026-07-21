@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct SvgInsertsPanelView: View {
-    @EnvironmentObject private var appModel: AppModel
+    @Environment(AppModel.self) private var appModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -37,7 +37,7 @@ struct SvgInsertsPanelView: View {
 struct SvgInsertEditorView: View {
     let index: Int
     @Binding var insert: WireSvgInsert
-    @EnvironmentObject private var appModel: AppModel
+    @Environment(AppModel.self) private var appModel
     @State private var thumbnail: Data?
 
     private var positionMode: Binding<PositionModeOption> {
