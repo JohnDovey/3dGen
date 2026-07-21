@@ -42,6 +42,7 @@ public class SqliteModelRepository : IModelRepository
 
         model.TextLines = await LoadTextLinesAsync(connection, modelId);
         model.SvgInserts = await LoadSvgInsertsAsync(connection, modelId);
+        model.ImageInserts = await LoadImageInsertsAsync(connection, modelId);
         return model;
     }
 
@@ -64,6 +65,7 @@ public class SqliteModelRepository : IModelRepository
         {
             model.TextLines = await LoadTextLinesAsync(connection, model.Id);
             model.SvgInserts = await LoadSvgInsertsAsync(connection, model.Id);
+            model.ImageInserts = await LoadImageInsertsAsync(connection, model.Id);
         }
 
         return models;
@@ -121,6 +123,12 @@ public class SqliteModelRepository : IModelRepository
             deleteSvgInserts.CommandText = "DELETE FROM SvgInserts WHERE ModelId = @id;";
             deleteSvgInserts.Parameters.AddWithValue("@id", model.Id);
             await deleteSvgInserts.ExecuteNonQueryAsync();
+
+            using var deleteImageInserts = connection.CreateCommand();
+            deleteImageInserts.Transaction = transaction;
+            deleteImageInserts.CommandText = "DELETE FROM ImageInserts WHERE ModelId = @id;";
+            deleteImageInserts.Parameters.AddWithValue("@id", model.Id);
+            await deleteImageInserts.ExecuteNonQueryAsync();
         }
 
         foreach (var textLine in model.TextLines)
@@ -171,6 +179,33 @@ public class SqliteModelRepository : IModelRepository
             insertSvg.Parameters.AddWithValue("@rotationZ", svgInsert.RotationZ);
             insertSvg.Parameters.AddWithValue("@colorArgb", svgInsert.ColorArgb);
             await insertSvg.ExecuteNonQueryAsync();
+        }
+
+        foreach (var imageInsert in model.ImageInserts)
+        {
+            using var insertImage = connection.CreateCommand();
+            insertImage.Transaction = transaction;
+            insertImage.CommandText = """
+                INSERT INTO ImageInserts
+                    (ModelId, LineNumber, SourceFileName, ImageData, Scale, ReliefHeight, Detail, Invert, PositionMode, PositionX, PositionY, PositionZ, RotationZ, ColorArgb)
+                VALUES
+                    (@modelId, @lineNumber, @sourceFileName, @imageData, @scale, @reliefHeight, @detail, @invert, @positionMode, @positionX, @positionY, @positionZ, @rotationZ, @colorArgb);
+                """;
+            insertImage.Parameters.AddWithValue("@modelId", model.Id);
+            insertImage.Parameters.AddWithValue("@lineNumber", imageInsert.LineNumber);
+            insertImage.Parameters.AddWithValue("@sourceFileName", (object?)imageInsert.SourceFileName ?? DBNull.Value);
+            insertImage.Parameters.AddWithValue("@imageData", imageInsert.ImageData);
+            insertImage.Parameters.AddWithValue("@scale", imageInsert.Scale);
+            insertImage.Parameters.AddWithValue("@reliefHeight", imageInsert.ReliefHeight);
+            insertImage.Parameters.AddWithValue("@detail", (int)imageInsert.Detail);
+            insertImage.Parameters.AddWithValue("@invert", imageInsert.Invert ? 1 : 0);
+            insertImage.Parameters.AddWithValue("@positionMode", (int)imageInsert.PositionMode);
+            insertImage.Parameters.AddWithValue("@positionX", imageInsert.PositionX);
+            insertImage.Parameters.AddWithValue("@positionY", imageInsert.PositionY);
+            insertImage.Parameters.AddWithValue("@positionZ", imageInsert.PositionZ);
+            insertImage.Parameters.AddWithValue("@rotationZ", imageInsert.RotationZ);
+            insertImage.Parameters.AddWithValue("@colorArgb", imageInsert.ColorArgb);
+            await insertImage.ExecuteNonQueryAsync();
         }
 
         transaction.Commit();
@@ -304,6 +339,37 @@ public class SqliteModelRepository : IModelRepository
                 SvgContent = reader.GetString(reader.GetOrdinal("SvgContent")),
                 Scale = (float)reader.GetDouble(reader.GetOrdinal("Scale")),
                 EmbossHeight = (float)reader.GetDouble(reader.GetOrdinal("EmbossHeight")),
+                PositionMode = (TextPositionMode)reader.GetInt32(reader.GetOrdinal("PositionMode")),
+                PositionX = reader.IsDBNull(reader.GetOrdinal("PositionX")) ? 0 : (float)reader.GetDouble(reader.GetOrdinal("PositionX")),
+                PositionY = reader.IsDBNull(reader.GetOrdinal("PositionY")) ? 0 : (float)reader.GetDouble(reader.GetOrdinal("PositionY")),
+                PositionZ = reader.IsDBNull(reader.GetOrdinal("PositionZ")) ? 0 : (float)reader.GetDouble(reader.GetOrdinal("PositionZ")),
+                RotationZ = (float)reader.GetDouble(reader.GetOrdinal("RotationZ")),
+                ColorArgb = GetInt32OrDefault(reader, "ColorArgb", DarkOrangeArgb)
+            });
+        }
+        return inserts;
+    }
+
+    private static async Task<List<ImageInsert>> LoadImageInsertsAsync(SqliteConnection connection, int modelId)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT * FROM ImageInserts WHERE ModelId = @id ORDER BY LineNumber;";
+        command.Parameters.AddWithValue("@id", modelId);
+
+        var inserts = new List<ImageInsert>();
+        using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            inserts.Add(new ImageInsert
+            {
+                Id = reader.GetInt32(reader.GetOrdinal("ImageInsertId")),
+                LineNumber = reader.GetInt32(reader.GetOrdinal("LineNumber")),
+                SourceFileName = reader.IsDBNull(reader.GetOrdinal("SourceFileName")) ? null : reader.GetString(reader.GetOrdinal("SourceFileName")),
+                ImageData = (byte[])reader["ImageData"],
+                Scale = (float)reader.GetDouble(reader.GetOrdinal("Scale")),
+                ReliefHeight = (float)reader.GetDouble(reader.GetOrdinal("ReliefHeight")),
+                Detail = (ImageDetail)reader.GetInt32(reader.GetOrdinal("Detail")),
+                Invert = reader.GetInt32(reader.GetOrdinal("Invert")) != 0,
                 PositionMode = (TextPositionMode)reader.GetInt32(reader.GetOrdinal("PositionMode")),
                 PositionX = reader.IsDBNull(reader.GetOrdinal("PositionX")) ? 0 : (float)reader.GetDouble(reader.GetOrdinal("PositionX")),
                 PositionY = reader.IsDBNull(reader.GetOrdinal("PositionY")) ? 0 : (float)reader.GetDouble(reader.GetOrdinal("PositionY")),

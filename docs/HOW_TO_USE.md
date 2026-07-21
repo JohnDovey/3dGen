@@ -116,7 +116,44 @@ and drag it directly in the 3D preview to reposition it (switches it to
 **Manual** mode). Text lines and SVG inserts drag independently of each other
 and of the base shape.
 
-## 5. Save, open, and start a new model
+## 5. Inserting a photo (bas-relief)
+
+A JPG or PNG can be embossed onto the shape as a **bas-relief** — brightness
+becomes height, the same way a coin or medallion turns a portrait into a
+raised relief. Under **Image inserts**, click **+ Insert Image...** to open
+the library (separate from the SVG library, since thumbnailing a photo and
+thumbnailing an SVG are different operations under the hood):
+
+![Image library with a gradient photo and a transparent-background logo](images/08-image-library.png)
+
+- **Import Image...** copies one or more `.png`/`.jpg`/`.jpeg` files from disk
+  into the app's library (`%LOCALAPPDATA%\ModelGenerator\ImageLibrary`)
+- Select a file and click **Insert**
+
+The inserted photo gets its own row:
+
+- **Scale (mm)** — the size along its longer bounding-box dimension
+- **Relief (mm)** — how far the brightest point is raised above the surface
+- **Detail** — Low/Medium/High grid resolution; higher looks smoother but
+  costs more triangles (and takes a moment longer to regenerate on every
+  change), so start at Medium and only go higher if you need it
+- **Invert** — flips which end is raised: unchecked, brighter pixels are
+  higher; checked, darker pixels are
+- **Color** — its own color picker
+- **Position** / **X**/**Y**/**Z**/**Rot°** — same AutoCenter/Manual/Relative
+  modes as text lines and SVG inserts
+
+**Transparent PNGs are clipped to their actual shape**, not stamped down as a
+rectangle — a logo cut out on a transparent background becomes a relief in
+just that logo's silhouette:
+
+![A gradient photo and a transparent-background logo, each as their own bas-relief](images/09-image-bas-relief.png)
+
+**Dragging an image insert in the viewport** works the same way as text and
+SVG inserts: click and drag it directly in the 3D preview to reposition it
+(switches it to **Manual** mode).
+
+## 6. Save, open, and start a new model
 
 The **File** menu has:
 
@@ -133,7 +170,7 @@ The **File** menu has:
 Saved models (including their generated mesh) live in a local SQLite database at
 `%LOCALAPPDATA%\ModelGenerator\models.sqlite`.
 
-## 6. Export to STL
+## 7. Export to STL
 
 Click **Export STL...** (left panel or File menu) and choose where to save the
 `.stl` file. This exports the exact mesh currently shown in the preview, ready

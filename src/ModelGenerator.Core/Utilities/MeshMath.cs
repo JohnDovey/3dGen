@@ -140,6 +140,104 @@ public static class MeshMath
         return mesh;
     }
 
+    /// <summary>Extrudes a masked heightmap grid into a solid — used for image bas-relief inserts.
+    /// topZ[row, col] is the world Z of each grid vertex (row 0 / col 0 at the -Y/-X corner, grid
+    /// centered at the origin); included[cellRow, cellCol] marks which cells (one row/col smaller
+    /// than topZ) actually have geometry — a fully-true mask degenerates to a plain rectangular
+    /// slab with a heightmapped top. Each included cell gets a top face (using its own corners'
+    /// topZ) and a flat bottom face at zBottom; a vertical wall is added along every cell edge
+    /// where the neighboring cell is excluded (or off-grid), so transparent/excluded regions are
+    /// genuinely absent from the mesh rather than merely flattened.</summary>
+    public static Mesh ExtrudeMaskedHeightfield(float[,] topZ, bool[,] included, float cellWidth, float cellDepth, float zBottom)
+    {
+        int rows = topZ.GetLength(0);
+        int cols = topZ.GetLength(1);
+        int cellRows = rows - 1;
+        int cellCols = cols - 1;
+
+        if (included.GetLength(0) != cellRows || included.GetLength(1) != cellCols)
+        {
+            throw new ArgumentException("included must be exactly one row/column smaller than topZ.");
+        }
+
+        var mesh = new Mesh();
+        if (cellRows <= 0 || cellCols <= 0)
+        {
+            return mesh;
+        }
+
+        Vector3 VertexTop(int row, int col) => new(
+            (col - (cols - 1) / 2f) * cellWidth,
+            (row - (rows - 1) / 2f) * cellDepth,
+            topZ[row, col]);
+
+        Vector3 VertexBottom(int row, int col) => new(
+            (col - (cols - 1) / 2f) * cellWidth,
+            (row - (rows - 1) / 2f) * cellDepth,
+            zBottom);
+
+        bool IsIncluded(int cellRow, int cellCol) =>
+            cellRow >= 0 && cellRow < cellRows && cellCol >= 0 && cellCol < cellCols && included[cellRow, cellCol];
+
+        for (int cellRow = 0; cellRow < cellRows; cellRow++)
+        {
+            for (int cellCol = 0; cellCol < cellCols; cellCol++)
+            {
+                if (!included[cellRow, cellCol])
+                {
+                    continue;
+                }
+
+                // Corners in CCW order (viewed from +Z), matching the winding convention used by
+                // every other Extrude* helper in this file.
+                var topA = VertexTop(cellRow, cellCol);
+                var topB = VertexTop(cellRow, cellCol + 1);
+                var topC = VertexTop(cellRow + 1, cellCol + 1);
+                var topD = VertexTop(cellRow + 1, cellCol);
+
+                mesh.AddTriangle(topA, topB, topC);
+                mesh.AddTriangle(topA, topC, topD);
+
+                var bottomA = VertexBottom(cellRow, cellCol);
+                var bottomB = VertexBottom(cellRow, cellCol + 1);
+                var bottomC = VertexBottom(cellRow + 1, cellCol + 1);
+                var bottomD = VertexBottom(cellRow + 1, cellCol);
+
+                // Reversed winding so the bottom cap faces down.
+                mesh.AddTriangle(bottomA, bottomC, bottomB);
+                mesh.AddTriangle(bottomA, bottomD, bottomC);
+
+                if (!IsIncluded(cellRow - 1, cellCol))
+                {
+                    AddHeightfieldWall(mesh, topA, topB, bottomA, bottomB);
+                }
+                if (!IsIncluded(cellRow, cellCol + 1))
+                {
+                    AddHeightfieldWall(mesh, topB, topC, bottomB, bottomC);
+                }
+                if (!IsIncluded(cellRow + 1, cellCol))
+                {
+                    AddHeightfieldWall(mesh, topC, topD, bottomC, bottomD);
+                }
+                if (!IsIncluded(cellRow, cellCol - 1))
+                {
+                    AddHeightfieldWall(mesh, topD, topA, bottomD, bottomA);
+                }
+            }
+        }
+
+        return mesh;
+    }
+
+    /// <summary>Builds one outward-facing wall quad along a single heightfield cell edge, from its
+    /// (possibly non-flat) top down to the flat bottom — same outward-normal convention as
+    /// AddSideWall, generalized to a per-edge top instead of one flat top.</summary>
+    private static void AddHeightfieldWall(Mesh mesh, Vector3 topP1, Vector3 topP2, Vector3 bottomP1, Vector3 bottomP2)
+    {
+        mesh.AddTriangle(bottomP1, bottomP2, topP2);
+        mesh.AddTriangle(bottomP1, topP2, topP1);
+    }
+
     /// <summary>Builds the vertical wall along a contour between zBottom and zTop.
     /// Pass outward = SignedArea(outline) > 0 to get an outward-facing wall regardless
     /// of whether the contour is an outer boundary or a hole.</summary>

@@ -11,10 +11,12 @@ public class MainForm : Form
     private readonly IModelOrchestrator _orchestrator;
     private readonly IModelRepository _repository;
     private readonly ISvgLibraryService _svgLibrary;
+    private readonly IImageLibraryService _imageLibrary;
 
     private readonly ShapeSelectorControl _shapeSelector;
     private readonly TextLinesPanel _textLinesPanel = new();
     private readonly SvgInsertsPanel _svgInsertsPanel;
+    private readonly ImageInsertsPanel _imageInsertsPanel;
     private readonly HelixViewportHost _viewportHost = new() { Dock = DockStyle.Fill };
     private readonly Button _exportButton = new() { Text = "Export STL...", AutoSize = true };
     private readonly Label _statusLabel = new() { Dock = DockStyle.Bottom, AutoSize = false, Height = 40, Padding = new Padding(6) };
@@ -23,13 +25,15 @@ public class MainForm : Form
     private int? _currentModelId;
     private string _currentModelName = "Untitled";
 
-    public MainForm(IModelOrchestrator orchestrator, IModelRepository repository, ISvgLibraryService svgLibrary)
+    public MainForm(IModelOrchestrator orchestrator, IModelRepository repository, ISvgLibraryService svgLibrary, IImageLibraryService imageLibrary)
     {
         _orchestrator = orchestrator;
         _repository = repository;
         _svgLibrary = svgLibrary;
+        _imageLibrary = imageLibrary;
         _shapeSelector = new ShapeSelectorControl(svgLibrary);
         _svgInsertsPanel = new SvgInsertsPanel(svgLibrary);
+        _imageInsertsPanel = new ImageInsertsPanel(imageLibrary);
 
         Width = 1200;
         Height = 800;
@@ -55,6 +59,14 @@ public class MainForm : Form
             Padding = new Padding(8, 12, 0, 4),
             Font = new System.Drawing.Font(Font, System.Drawing.FontStyle.Bold)
         };
+        var imageInsertsLabel = new Label
+        {
+            Text = "Image inserts",
+            AutoSize = true,
+            Dock = DockStyle.Top,
+            Padding = new Padding(8, 12, 0, 4),
+            Font = new System.Drawing.Font(Font, System.Drawing.FontStyle.Bold)
+        };
         _exportButton.Dock = DockStyle.Top;
         _exportButton.Margin = new Padding(8);
 
@@ -63,6 +75,8 @@ public class MainForm : Form
         // collapsed to ~1px wide). For same-edge Dock siblings, the LAST one added ends up
         // closest to that edge, so add these in reverse of the desired top-to-bottom order.
         leftPanel.Controls.Add(_exportButton);
+        leftPanel.Controls.Add(_imageInsertsPanel);
+        leftPanel.Controls.Add(imageInsertsLabel);
         leftPanel.Controls.Add(_svgInsertsPanel);
         leftPanel.Controls.Add(svgInsertsLabel);
         leftPanel.Controls.Add(_textLinesPanel);
@@ -84,16 +98,21 @@ public class MainForm : Form
         _shapeSelector.ValuesChanged += (_, _) => RegeneratePreview();
         _textLinesPanel.LinesChanged += (_, _) => RegeneratePreview();
         _svgInsertsPanel.InsertsChanged += (_, _) => RegeneratePreview();
+        _imageInsertsPanel.InsertsChanged += (_, _) => RegeneratePreview();
         _exportButton.Click += (_, _) => ExportStl();
         _viewportHost.ItemDragged += (kind, index, x, y, z) =>
         {
-            if (kind == DraggableItemKind.TextLine)
+            switch (kind)
             {
-                _textLinesPanel.UpdateLinePosition(index, x, y, z);
-            }
-            else
-            {
-                _svgInsertsPanel.UpdateInsertPosition(index, x, y, z);
+                case DraggableItemKind.TextLine:
+                    _textLinesPanel.UpdateLinePosition(index, x, y, z);
+                    break;
+                case DraggableItemKind.SvgInsert:
+                    _svgInsertsPanel.UpdateInsertPosition(index, x, y, z);
+                    break;
+                default:
+                    _imageInsertsPanel.UpdateInsertPosition(index, x, y, z);
+                    break;
             }
         };
 
@@ -161,6 +180,7 @@ public class MainForm : Form
         _textLinesPanel.Clear();
         _textLinesPanel.AddLine();
         _svgInsertsPanel.Clear();
+        _imageInsertsPanel.Clear();
         UpdateTitle();
         RegeneratePreview();
     }
@@ -186,6 +206,7 @@ public class MainForm : Form
         _shapeSelector.LoadFrom(model);
         _textLinesPanel.LoadLines(model.TextLines);
         _svgInsertsPanel.LoadInserts(model.SvgInserts);
+        _imageInsertsPanel.LoadInserts(model.ImageInserts);
         UpdateTitle();
         RegeneratePreview();
     }
@@ -234,6 +255,7 @@ public class MainForm : Form
         _shapeSelector.ApplyTo(model);
         model.TextLines = _textLinesPanel.Lines;
         model.SvgInserts = _svgInsertsPanel.Inserts;
+        model.ImageInserts = _imageInsertsPanel.Inserts;
         return model;
     }
 
@@ -247,7 +269,7 @@ public class MainForm : Form
 
         try
         {
-            var (floor, border, textMeshes, svgMeshes) = _orchestrator.GenerateModelParts(model);
+            var (floor, border, textMeshes, svgMeshes, imageMeshes) = _orchestrator.GenerateModelParts(model);
 
             var merged = new CoreMesh();
             merged.Append(floor);
@@ -260,11 +282,16 @@ public class MainForm : Form
             {
                 merged.Append(svgMesh.Mesh);
             }
+            foreach (var imageMesh in imageMeshes)
+            {
+                merged.Append(imageMesh.Mesh);
+            }
             _currentMesh = merged;
 
             var items = textMeshes
                 .Select((t, i) => new DraggableMesh(t.Mesh, t.Line.ColorArgb.ToWpfColor(), DraggableItemKind.TextLine, i))
                 .Concat(svgMeshes.Select((s, i) => new DraggableMesh(s.Mesh, s.Insert.ColorArgb.ToWpfColor(), DraggableItemKind.SvgInsert, i)))
+                .Concat(imageMeshes.Select((im, i) => new DraggableMesh(im.Mesh, im.Insert.ColorArgb.ToWpfColor(), DraggableItemKind.ImageInsert, i)))
                 .ToList();
 
             _viewportHost.ShowModel(

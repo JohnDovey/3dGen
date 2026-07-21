@@ -12,16 +12,17 @@ namespace ModelGenerator.UI.Controls;
 public readonly record struct ColoredMesh(CoreMesh Mesh, WpfColor Color);
 
 /// <summary>Which kind of item a draggable visual represents, so a drag event can be routed back
-/// to the right panel (TextLinesPanel vs SvgInsertsPanel).</summary>
+/// to the right panel (TextLinesPanel vs SvgInsertsPanel vs ImageInsertsPanel).</summary>
 public enum DraggableItemKind
 {
     TextLine,
-    SvgInsert
+    SvgInsert,
+    ImageInsert
 }
 
 /// <summary>A mesh with its own color that can be picked up and dragged in the viewport — a text
-/// line or an SVG insert. Index is that item's position within its own list (TextLines or
-/// SvgInserts), not a global index across both.</summary>
+/// line, SVG insert, or image insert. Index is that item's position within its own list (TextLines,
+/// SvgInserts, or ImageInserts), not a global index across all three.</summary>
 public readonly record struct DraggableMesh(CoreMesh Mesh, WpfColor Color, DraggableItemKind Kind, int Index);
 
 /// <summary>Hosts a WPF HelixViewport3D inside the WinForms UI via ElementHost, converts Core

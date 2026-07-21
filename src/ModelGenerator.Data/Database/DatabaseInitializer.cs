@@ -75,6 +75,25 @@ public class DatabaseInitializer
                     FOREIGN KEY (ModelId) REFERENCES Models(ModelId) ON DELETE CASCADE
                 );
 
+                CREATE TABLE IF NOT EXISTS ImageInserts (
+                    ImageInsertId INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ModelId INTEGER NOT NULL,
+                    LineNumber INTEGER NOT NULL,
+                    SourceFileName TEXT,
+                    ImageData BLOB NOT NULL,
+                    Scale REAL NOT NULL DEFAULT 40,
+                    ReliefHeight REAL NOT NULL DEFAULT 3,
+                    Detail INTEGER NOT NULL DEFAULT 1,
+                    Invert INTEGER NOT NULL DEFAULT 0,
+                    PositionMode INTEGER NOT NULL DEFAULT 0,
+                    PositionX REAL,
+                    PositionY REAL,
+                    PositionZ REAL,
+                    RotationZ REAL NOT NULL DEFAULT 0,
+                    ColorArgb INTEGER NOT NULL DEFAULT {DarkOrangeArgb},
+                    FOREIGN KEY (ModelId) REFERENCES Models(ModelId) ON DELETE CASCADE
+                );
+
                 CREATE TABLE IF NOT EXISTS MeshCache (
                     MeshCacheId INTEGER PRIMARY KEY AUTOINCREMENT,
                     ModelId INTEGER NOT NULL UNIQUE,

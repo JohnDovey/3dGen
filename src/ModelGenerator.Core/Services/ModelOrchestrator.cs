@@ -13,6 +13,7 @@ public class ModelOrchestrator : IModelOrchestrator
     private readonly IShapeGenerator _shapeGenerator;
     private readonly ITextMeshConverter _textMeshConverter;
     private readonly ISvgMeshConverter _svgMeshConverter;
+    private readonly IImageMeshConverter _imageMeshConverter;
     private readonly ITextPositioner _textPositioner;
     private readonly IMeshComposer _meshComposer;
 
@@ -20,29 +21,32 @@ public class ModelOrchestrator : IModelOrchestrator
         IShapeGenerator shapeGenerator,
         ITextMeshConverter textMeshConverter,
         ISvgMeshConverter svgMeshConverter,
+        IImageMeshConverter imageMeshConverter,
         ITextPositioner textPositioner,
         IMeshComposer meshComposer)
     {
         _shapeGenerator = shapeGenerator;
         _textMeshConverter = textMeshConverter;
         _svgMeshConverter = svgMeshConverter;
+        _imageMeshConverter = imageMeshConverter;
         _textPositioner = textPositioner;
         _meshComposer = meshComposer;
     }
 
     public Mesh GenerateModel(Model model)
     {
-        var (floor, border, textMeshes, svgMeshes) = GenerateModelParts(model);
+        var (floor, border, textMeshes, svgMeshes, imageMeshes) = GenerateModelParts(model);
 
         // Every mesh already has its transform baked in, so this is a plain merge. Color is
         // irrelevant for STL export, so floor/border don't need to stay separate here.
         var allMeshes = new List<Mesh> { floor, border };
         allMeshes.AddRange(textMeshes.Select(t => t.Mesh));
         allMeshes.AddRange(svgMeshes.Select(s => s.Mesh));
+        allMeshes.AddRange(imageMeshes.Select(i => i.Mesh));
         return _meshComposer.MergeMeshes(allMeshes);
     }
 
-    public (Mesh Floor, Mesh Border, IReadOnlyList<PositionedTextMesh> TextMeshes, IReadOnlyList<PositionedSvgMesh> SvgMeshes) GenerateModelParts(Model model)
+    public (Mesh Floor, Mesh Border, IReadOnlyList<PositionedTextMesh> TextMeshes, IReadOnlyList<PositionedSvgMesh> SvgMeshes, IReadOnlyList<PositionedImageMesh> ImageMeshes) GenerateModelParts(Model model)
     {
         var (floor, border) = _shapeGenerator.GenerateParts(model);
 
@@ -58,7 +62,13 @@ public class ModelOrchestrator : IModelOrchestrator
             .Zip(positionedSvgMeshes, (insert, mesh) => new PositionedSvgMesh(insert, mesh))
             .ToList();
 
-        return (floor, border, textResults, svgResults);
+        var rawImageMeshes = _imageMeshConverter.ConvertMultipleImageInserts(model.ImageInserts);
+        var positionedImageMeshes = PositionItems(model.ImageInserts, rawImageMeshes, model, _textPositioner);
+        var imageResults = model.ImageInserts
+            .Zip(positionedImageMeshes, (insert, mesh) => new PositionedImageMesh(insert, mesh))
+            .ToList();
+
+        return (floor, border, textResults, svgResults, imageResults);
     }
 
     /// <summary>Positions a set of items (text lines or SVG inserts) that each carry a position

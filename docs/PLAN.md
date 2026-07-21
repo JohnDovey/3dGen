@@ -85,7 +85,32 @@
   Open dialog that `ShapeType.CustomSvg` and the SVG content round-trip through SQLite correctly
   (also covered by a repository unit test). 60 tests passing total.
 
-Remaining ideas (not currently planned as a phase): richer validation feedback in dialogs.
+- **Phase 9 (done):** Photo/image bas-relief inserts — a JPG or PNG can now be embossed onto the
+  shape as a grayscale heightmap relief (`ImageInsert`, `ImageMeshConverter`), the same way a
+  medallion turns a portrait into a raised relief, with its own `ImageLibrary`/
+  `ImageLibraryService`/`ImageLibraryDialog` mirroring the SVG library exactly. New
+  `MeshMath.ExtrudeMaskedHeightfield` extrudes a heightmap grid where each *cell* (not vertex) can
+  be independently included or excluded — an included cell gets top/bottom faces from its
+  corners' heights, and a wall is added wherever an included cell borders an excluded one (or the
+  grid edge). `ImageMeshConverter` box-samples each cell's block of source pixels (via `LockBits`,
+  not `GetPixel`, since this runs on every live-preview regeneration) for both luminance (→
+  height, via `Detail`'s Low/Medium/High grid resolution and `Invert`) and alpha (→ inclusion,
+  thresholded at 50%) — a JPG or fully-opaque PNG has no alpha variation so every cell is
+  included, degenerating cleanly to a flat rectangular tile; a PNG with a transparent background
+  gets genuinely clipped to its own silhouette instead of being flattened into a rectangle.
+  Verified live end-to-end: inserted a radial-gradient JPG and watched it render as a visible
+  raised relief (2,304 → 52,992 vertices just from the one insert at Medium detail); confirmed
+  `Invert` visibly flips which side is raised; confirmed Low → Medium → High detail smoothly
+  increases fidelity (52,992 → 201,984 vertices) with no crash or hang; inserted a
+  transparent-background PNG logo and confirmed it rendered as a genuinely circular relief (not
+  a rectangle) with jagged edges at the alpha boundary; Save → New → Open round-tripped both
+  inserts with identical vertex/triangle counts and settings; Export STL produced a file whose
+  byte size exactly matched the expected triangle count (75,956 × 50 + 84-byte header). 74 tests
+  passing total.
+
+Remaining ideas (not currently planned as a phase): richer validation feedback in dialogs; a
+configurable alpha-inclusion threshold (currently a hardcoded 50%) if the default proves wrong
+for some images in practice.
 
 
 Windows desktop app (Visual Studio / Windows Forms) to generate 3D-printable models:

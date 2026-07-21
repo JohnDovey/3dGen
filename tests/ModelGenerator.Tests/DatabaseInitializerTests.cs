@@ -25,6 +25,7 @@ public class DatabaseInitializerTests : IDisposable
         Assert.True(ColumnExists("Models", "CustomShapeSourceFileName"));
         Assert.True(ColumnExists("TextLines", "ColorArgb"));
         Assert.True(TableExists("SvgInserts"));
+        Assert.True(TableExists("ImageInserts"));
     }
 
     [Fact]
@@ -86,6 +87,7 @@ public class DatabaseInitializerTests : IDisposable
         Assert.True(ColumnExists("Models", "CustomShapeSourceFileName"));
         Assert.True(ColumnExists("TextLines", "ColorArgb"));
         Assert.True(TableExists("SvgInserts"));
+        Assert.True(TableExists("ImageInserts"));
 
         using var verifyConnection = _connectionFactory.CreateConnection();
         using var verifyCommand = verifyConnection.CreateCommand();

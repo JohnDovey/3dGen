@@ -146,6 +146,92 @@ public class SqliteModelRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveAndRetrieveModel_RoundTripsImageInsertByteForByte()
+    {
+        byte[] imageData = CreateSampleImageBytes();
+        var model = new Model
+        {
+            Name = "Photo Model",
+            ShapeType = ShapeType.Circle,
+            ShapeSize = 60,
+            ImageInserts =
+            {
+                new ImageInsert
+                {
+                    LineNumber = 0,
+                    SourceFileName = "photo.png",
+                    ImageData = imageData,
+                    Scale = 30,
+                    ReliefHeight = 4,
+                    Detail = ImageDetail.High,
+                    Invert = true,
+                    PositionMode = TextPositionMode.Relative,
+                    PositionX = 5,
+                    PositionY = -8,
+                    PositionZ = 3,
+                    RotationZ = 90,
+                    ColorArgb = System.Drawing.Color.Purple.ToArgb()
+                }
+            }
+        };
+
+        int id = await _repository.SaveModelAsync(model);
+        var loaded = await _repository.GetModelByIdAsync(id);
+
+        Assert.NotNull(loaded);
+        Assert.Single(loaded!.ImageInserts);
+        var imageInsert = loaded.ImageInserts[0];
+        Assert.Equal("photo.png", imageInsert.SourceFileName);
+        Assert.Equal(imageData, imageInsert.ImageData);
+        Assert.Equal(30, imageInsert.Scale);
+        Assert.Equal(4, imageInsert.ReliefHeight);
+        Assert.Equal(ImageDetail.High, imageInsert.Detail);
+        Assert.True(imageInsert.Invert);
+        Assert.Equal(TextPositionMode.Relative, imageInsert.PositionMode);
+        Assert.Equal(5, imageInsert.PositionX);
+        Assert.Equal(-8, imageInsert.PositionY);
+        Assert.Equal(3, imageInsert.PositionZ);
+        Assert.Equal(90, imageInsert.RotationZ);
+        Assert.Equal(System.Drawing.Color.Purple.ToArgb(), imageInsert.ColorArgb);
+    }
+
+    [Fact]
+    public async Task SaveModelAsync_OnUpdate_ReplacesImageInsertsLikeSvgInserts()
+    {
+        byte[] imageData = CreateSampleImageBytes();
+        var model = new Model
+        {
+            Name = "Updatable Photo",
+            ShapeType = ShapeType.Circle,
+            ShapeSize = 60,
+            ImageInserts = { new ImageInsert { LineNumber = 0, ImageData = imageData } }
+        };
+        int id = await _repository.SaveModelAsync(model);
+
+        model.ImageInserts.Clear();
+        model.ImageInserts.Add(new ImageInsert { LineNumber = 0, ImageData = imageData, Scale = 77 });
+        await _repository.SaveModelAsync(model);
+
+        var loaded = await _repository.GetModelByIdAsync(id);
+
+        Assert.NotNull(loaded);
+        Assert.Single(loaded!.ImageInserts);
+        Assert.Equal(77, loaded.ImageInserts[0].Scale);
+    }
+
+    private static byte[] CreateSampleImageBytes()
+    {
+        using var bitmap = new System.Drawing.Bitmap(10, 10, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        using (var g = System.Drawing.Graphics.FromImage(bitmap))
+        {
+            g.Clear(System.Drawing.Color.Gray);
+        }
+        using var stream = new MemoryStream();
+        bitmap.Save(stream, System.Drawing.Imaging.ImageFormat.Png);
+        return stream.ToArray();
+    }
+
+    [Fact]
     public async Task SaveModelAsync_OnUpdate_ReplacesSvgInsertsLikeTextLines()
     {
         const string svg = """<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" /></svg>""";
