@@ -22,6 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\ModelGenerator.Core\ModelGenerator.Core.csproj" />
     <ProjectReference Include="..\..\src\ModelGenerator.Data\ModelGenerator.Data.csproj" />
+    <ProjectReference Include="..\..\src\ModelGenerator.Host\ModelGenerator.Host.csproj" />
   </ItemGroup>
 
 </Project>

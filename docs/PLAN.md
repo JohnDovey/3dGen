@@ -156,9 +156,15 @@
   (`ArgbColors`); thumbnail APIs return PNG `byte[]` (WinForms decodes via
   `PngThumbnail`). `[SupportedOSPlatform("windows")]` gates removed from Core
   services. Tests retargeted to `net10.0` and pass on macOS (`dotnet test
-  tests/ModelGenerator.Tests` — 98 tests). WinForms still builds (thumbnail
-  callers updated). This unblocks a future SwiftUI Mac host against portable
-  Core/Data.
+  tests/ModelGenerator.Tests`). WinForms still builds (thumbnail callers
+  updated). This unblocks a SwiftUI Mac host against portable Core/Data.
+
+- **Phase 1 / Host process + JSON-RPC (done):** New `ModelGenerator.Host`
+  console app exposes Core via NDJSON RPC (`ping`, `generateParts`, `exportStl`)
+  over Unix domain socket or stdio, plus one-shot CLI (`export`,
+  `generate-parts`). Wire format documented in `docs/HOST_PROTOCOL.md`. Decision
+  locked: **process + JSON-RPC** (not NativeAOT) for the Mac bridge. Integration
+  tests cover service methods and session framing.
 
 Remaining ideas (not currently planned as a phase): richer validation feedback in dialogs; a
 configurable alpha-inclusion threshold (currently a hardcoded 50%) if the default proves wrong

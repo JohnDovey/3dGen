@@ -75,8 +75,11 @@ src/
                          editors, SVG and photo library browsers, a Helix
                          Toolkit 3D viewport (hosted via WPF interop), and
                          New/Open/Save/Export STL menus.
+  ModelGenerator.Host   Headless NDJSON RPC bridge (Unix socket / stdio) so a
+                         Mac SwiftUI app can call Core without reimplementing
+                         geometry — see docs/HOST_PROTOCOL.md.
 tests/
-  ModelGenerator.Tests  Unit tests for Core and Data.
+  ModelGenerator.Tests  Unit tests for Core, Data, and Host.
 ```
 
 `ModelGenerator.Core` and `ModelGenerator.Data` have no Windows Forms dependency
