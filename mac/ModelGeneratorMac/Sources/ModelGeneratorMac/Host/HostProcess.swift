@@ -90,8 +90,9 @@ final class HostProcess {
 
     /// Resolves the host executable:
     /// 1. `MODELGENERATOR_HOST` env var
-    /// 2. published sibling `ModelGenerator.Host` next to this binary
-    /// 3. `dotnet run --project …/ModelGenerator.Host` via a temp launcher script
+    /// 2. Sibling `ModelGenerator.Host` next to this binary (`.app/Contents/MacOS/`)
+    /// 3. `Contents/Resources/ModelGenerator.Host` inside the app bundle
+    /// 4. `dotnet run --project …/ModelGenerator.Host` via a temp launcher (dev)
     static func resolveHostExecutable() throws -> URL {
         if let env = ProcessInfo.processInfo.environment["MODELGENERATOR_HOST"], !env.isEmpty {
             let url = URL(fileURLWithPath: env)
@@ -101,12 +102,19 @@ final class HostProcess {
             throw HostError.hostNotFound("MODELGENERATOR_HOST=\(env) is not executable")
         }
 
-        if let bundleHost = Bundle.main.executableURL?
-            .deletingLastPathComponent()
-            .appendingPathComponent("ModelGenerator.Host")
-        {
-            if FileManager.default.isExecutableFile(atPath: bundleHost.path) {
-                return bundleHost
+        // Packaged .app: Contents/MacOS/ModelGenerator.Host next to the UI binary
+        if let exeDir = Bundle.main.executableURL?.deletingLastPathComponent() {
+            let sibling = exeDir.appendingPathComponent("ModelGenerator.Host")
+            if FileManager.default.isExecutableFile(atPath: sibling.path) {
+                return sibling
+            }
+        }
+
+        // Alternate: Contents/Resources/ModelGenerator.Host
+        if let resources = Bundle.main.resourceURL {
+            let embedded = resources.appendingPathComponent("ModelGenerator.Host")
+            if FileManager.default.isExecutableFile(atPath: embedded.path) {
+                return embedded
             }
         }
 

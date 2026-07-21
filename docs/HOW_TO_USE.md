@@ -5,7 +5,18 @@ for 3D printing.
 
 ## Launching the app
 
-Run `ModelGenerator.UI.exe` (or `dotnet run --project src/ModelGenerator.UI`).
+**Windows:** run `ModelGenerator.UI.exe` (or `dotnet run --project src/ModelGenerator.UI`).
+
+**macOS:** open `ModelGenerator.app` from a release build, or in development:
+
+```bash
+cd mac/ModelGeneratorMac
+swift run
+```
+
+(The Mac app starts a small `ModelGenerator.Host` helper in the background for
+geometry and save/load — no separate window.)
+
 The main window opens with a default circular shape already previewed in the 3D
 viewport on the right:
 

@@ -1,4 +1,4 @@
-# ModelGeneratorMac (Phase 2)
+# ModelGeneratorMac
 
 Native **SwiftUI + SceneKit** front end for macOS. Talks to `ModelGenerator.Host`
 over a Unix domain socket (NDJSON RPC) — see [`docs/HOST_PROTOCOL.md`](../../docs/HOST_PROTOCOL.md).
@@ -7,9 +7,11 @@ over a Unix domain socket (NDJSON RPC) — see [`docs/HOST_PROTOCOL.md`](../../d
 
 - macOS 14+
 - Xcode 16 / Swift 6
-- [.NET 10 SDK](https://dotnet.microsoft.com/download) on `PATH` (dev mode launches the host via `dotnet run`)
+- [.NET 10 SDK](https://dotnet.microsoft.com/download) on `PATH` for **development** only
 
-Optional: publish a self-contained host and set:
+Release builds embed a self-contained Host; end users do not need .NET.
+
+Optional override:
 
 ```bash
 export MODELGENERATOR_HOST=/path/to/ModelGenerator.Host
@@ -17,35 +19,43 @@ export MODELGENERATOR_HOST=/path/to/ModelGenerator.Host
 
 ## Run (development)
 
-From the **repository root**:
+From the **repository root** (so `docs/` Help content is discoverable):
 
 ```bash
-# Terminal A is optional — the app starts the host itself.
 cd mac/ModelGeneratorMac
 swift run
 ```
 
-Or from the repo root:
-
-```bash
-swift run --package-path mac/ModelGeneratorMac
-```
-
 First launch may take a while while `dotnet run` builds the host.
 
-## What works (through Phase 6)
+## Release package
 
-- Left inspector: shape type (circle/triangle/shield/rectangle/**Custom SVG**), size, thickness, border, colors
-- **Text lines:** add/remove; content, system fonts, size, emboss, color, AutoCenter/Manual/Relative + X/Y/Z/Rot
-- **SVG inserts:** library browser (search, tags, import, delete, thumbnails), insert params, live preview
-- **Image bas-reliefs:** image library (PNG/JPG), scale/relief/detail/invert/position
-- **CustomSvg** base shape from the SVG library
-- SceneKit preview: orbit camera; **click** to select (yellow box); **drag** text/SVG/images to reposition
-- Status bar with vertex/triangle counts or errors
-- **File:** New / Open / Save / Save As (same SQLite DB as Windows under Application Support)
-- **Edit:** Undo / Redo (⌘Z / ⇧⌘Z), dirty `*` in title, discard prompts
-- **Export STL…** (⌘⇧E or inspector button)
+From the repository root:
 
-## Not yet (later phases)
+```bash
+./build-release-mac.sh
+open dist/ModelGenerator.app
+```
 
-- Packaged `.app` with embedded host binary, Help/About, notarization
+Produces `dist/ModelGenerator.app` and `dist/ModelGenerator-v*-osx-*.zip`.
+
+## Features (Phases 2–7)
+
+- Shapes: circle / triangle / shield / rectangle / **Custom SVG**
+- Text lines, SVG inserts, image bas-reliefs (libraries with search/tags/import)
+- Live SceneKit preview; drag items to reposition; selection outline
+- New / Open / Save / Save As, undo/redo, dirty prompts
+- Export STL
+- **Help → How to Use** (shared markdown), **About**
+
+## Layout
+
+```
+Sources/ModelGeneratorMac/
+  ModelGeneratorMacApp.swift   menus, sheets
+  ContentView.swift
+  Host/                        process + NDJSON client
+  Model/                       AppModel, wire types, undo
+  Views/                       inspectors, libraries, SceneKit
+  Help/                        Help + About
+```

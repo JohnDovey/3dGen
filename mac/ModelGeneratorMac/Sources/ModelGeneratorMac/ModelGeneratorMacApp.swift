@@ -4,6 +4,8 @@ import SwiftUI
 struct ModelGeneratorMacApp: App {
     @NSApplicationDelegateAdaptor(MacAppSupport.self) private var appDelegate
     @StateObject private var appModel = AppModel()
+    @State private var showHelp = false
+    @State private var showAbout = false
 
     var body: some Scene {
         WindowGroup {
@@ -13,8 +15,20 @@ struct ModelGeneratorMacApp: App {
                 .onAppear {
                     appDelegate.appModel = appModel
                 }
+                .sheet(isPresented: $showHelp) {
+                    HelpView()
+                }
+                .sheet(isPresented: $showAbout) {
+                    AboutView()
+                }
         }
         .commands {
+            CommandGroup(replacing: .appInfo) {
+                Button("About 3D Model Generator") {
+                    showAbout = true
+                }
+            }
+
             CommandGroup(replacing: .newItem) {
                 Button("New") {
                     appModel.requestNewDocument()
@@ -59,6 +73,13 @@ struct ModelGeneratorMacApp: App {
                 }
                 .keyboardShortcut("z", modifiers: [.command, .shift])
                 .disabled(!appModel.canRedo)
+            }
+
+            CommandGroup(replacing: .help) {
+                Button("How to Use 3D Model Generator") {
+                    showHelp = true
+                }
+                .keyboardShortcut("/", modifiers: [.command, .shift])
             }
         }
         .defaultSize(width: 1200, height: 800)

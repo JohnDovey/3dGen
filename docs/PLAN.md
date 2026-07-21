@@ -200,6 +200,11 @@
   (yellow wire box), drag text/SVG/image onto shape top plane → Manual
   X/Y/Z (camera orbit disabled while dragging).
 
+- **Phase 7 / Mac Help, About, packaging (done):** In-app Help (shared
+  `docs/HOW_TO_USE.md` via WKWebView), About sheet, `build-release-mac.sh`
+  assembling `ModelGenerator.app` with embedded self-contained Host + Help
+  resources and a versioned zip. Dual-platform README / launch notes.
+
 Remaining ideas (not currently planned as a phase): richer validation feedback in dialogs; a
 configurable alpha-inclusion threshold (currently a hardcoded 50%) if the default proves wrong
 for some images in practice; the same off-center-artwork drag-jump class of bug likely also
