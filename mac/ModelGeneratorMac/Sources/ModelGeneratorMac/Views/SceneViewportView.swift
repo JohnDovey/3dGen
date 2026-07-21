@@ -232,8 +232,27 @@ struct SceneKitView: NSViewRepresentable {
 
         private static func partsToken(_ parts: GeneratePartsResult?) -> String {
             guard let parts else { return "nil" }
-            // Content hash without comparing full vertex arrays for equality each frame.
-            return "\(parts.vertexCount)|\(parts.triangleCount)|\(parts.floor.vertices.count)|\(parts.border.vertices.count)|\(parts.textMeshes.count)|\(parts.svgMeshes.count)|\(parts.imageMeshes.count)|\(parts.borderTextMeshes.count)|\(parts.floor.colorArgb)|\(parts.border.colorArgb)"
+            // Lightweight identity so we rebuild when mesh *content* changes without
+            // Equatable-comparing megabytes of floats each SwiftUI update.
+            // Include per-layer vertex counts + colors so border-text (and other) color-only
+            // or topology-stable edits still refresh — analogous to WinForms always
+            // ClearVisuals()+re-add on every ShowModel.
+            var token = "\(parts.vertexCount)|\(parts.triangleCount)"
+            token += "|f:\(parts.floor.vertices.count),\(parts.floor.indices.count),\(parts.floor.colorArgb)"
+            token += "|b:\(parts.border.vertices.count),\(parts.border.indices.count),\(parts.border.colorArgb)"
+            token += positionedToken("t", parts.textMeshes)
+            token += positionedToken("s", parts.svgMeshes)
+            token += positionedToken("i", parts.imageMeshes)
+            token += positionedToken("bt", parts.borderTextMeshes)
+            return token
+        }
+
+        private static func positionedToken(_ prefix: String, _ items: [WirePositionedMesh]) -> String {
+            var s = "|\(prefix):\(items.count)"
+            for item in items {
+                s += "{\(item.index),\(item.mesh.vertices.count),\(item.mesh.indices.count),\(item.mesh.colorArgb),\(item.colorArgb)}"
+            }
+            return s
         }
 
         /// Place a top-down camera so the whole model is visible.
