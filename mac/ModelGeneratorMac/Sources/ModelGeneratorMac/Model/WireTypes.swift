@@ -1,11 +1,77 @@
 import Foundation
 
+// MARK: - Host JSON helpers
+
+/// Host (`JsonStringEnumConverter`) may emit enums as camelCase strings *or* integers.
+/// Mac wire types keep `Int` raw values; this wrapper accepts both on decode and always
+/// encodes as integers (which Core still accepts via `allowIntegerValues: true`).
+@propertyWrapper
+struct FlexibleEnumInt: Codable, Equatable, Hashable {
+    var wrappedValue: Int
+
+    init(wrappedValue: Int) {
+        self.wrappedValue = wrappedValue
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if let i = try? c.decode(Int.self) {
+            wrappedValue = i
+            return
+        }
+        // JSONSerialization / mixed payloads sometimes surface whole numbers as Double.
+        if let d = try? c.decode(Double.self), d.rounded() == d {
+            wrappedValue = Int(d)
+            return
+        }
+        if let s = try? c.decode(String.self) {
+            wrappedValue = Self.resolve(s)
+            return
+        }
+        throw DecodingError.dataCorruptedError(
+            in: c,
+            debugDescription: "Expected enum as Int or camelCase string"
+        )
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        try c.encode(wrappedValue)
+    }
+
+    /// Maps Core enum names (any casing) to their integer raw values.
+    private static func resolve(_ raw: String) -> Int {
+        let key = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch key {
+        // ShapeType
+        case "circle": return 0
+        case "triangle": return 1
+        case "shield": return 2
+        case "rectangle": return 3
+        case "customsvg": return 4
+        // TextPositionMode
+        case "autocenter": return 0
+        case "manual": return 1
+        case "relative": return 2
+        // BorderTextMode
+        case "embossed": return 0
+        case "engraved": return 1
+        // ImageDetail
+        case "low": return 0
+        case "medium": return 1
+        case "high": return 2
+        default:
+            return Int(key) ?? 0
+        }
+    }
+}
+
 // MARK: - Wire model (matches ModelGenerator.Core JSON / Host protocol)
 
 struct WireModel: Codable, Equatable {
     var id: Int = 0
     var name: String = "Untitled"
-    var shapeType: Int = 0
+    @FlexibleEnumInt var shapeType: Int = 0
     var shapeSize: Float = 60
     var shapeHeight: Float = 40
     var shapeThickness: Float = 10
@@ -45,7 +111,8 @@ struct WireModel: Codable, Equatable {
 struct ModelSummary: Codable, Identifiable, Equatable {
     var id: Int
     var name: String
-    var shapeType: Int
+    /// Host listModels currently sends a numeric cast; tolerate string enums too.
+    @FlexibleEnumInt var shapeType: Int = 0
     var modifiedDate: Date?
 
     var shapeLabel: String {
@@ -80,7 +147,7 @@ struct WireTextLine: Codable, Equatable, Identifiable {
     var fontName: String = "Arial"
     var fontSize: Float = 12
     var textHeight: Float = 5
-    var positionMode: Int = 0
+    @FlexibleEnumInt var positionMode: Int = 0
     var positionX: Float = 0
     var positionY: Float = 0
     var positionZ: Float = 0
@@ -104,7 +171,7 @@ struct WireBorderTextLine: Codable, Equatable, Identifiable {
     /// Emboss protrusion above border top, or engrave depth (mm).
     var height: Float = 1.5
     /// 0 = embossed, 1 = engraved.
-    var mode: Int = 0
+    @FlexibleEnumInt var mode: Int = 0
     /// Center of the text span on the border; 0° = +X, CCW; 90° = top.
     var anchorAngleDegrees: Float = 90
     var colorArgb: Int = -29_696 // DarkOrange
@@ -154,7 +221,7 @@ struct WireSvgInsert: Codable, Equatable, Identifiable {
     var svgContent: String = ""
     var scale: Float = 40
     var embossHeight: Float = 5
-    var positionMode: Int = 0
+    @FlexibleEnumInt var positionMode: Int = 0
     var positionX: Float = 0
     var positionY: Float = 0
     var positionZ: Float = 0
@@ -223,9 +290,9 @@ struct WireImageInsert: Codable, Equatable, Identifiable {
     var imageData: Data = Data()
     var scale: Float = 40
     var reliefHeight: Float = 3
-    var detail: Int = 1 // ImageDetail.Medium
+    @FlexibleEnumInt var detail: Int = 1 // ImageDetail.Medium
     var invert: Bool = false
-    var positionMode: Int = 0
+    @FlexibleEnumInt var positionMode: Int = 0
     var positionX: Float = 0
     var positionY: Float = 0
     var positionZ: Float = 0

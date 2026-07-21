@@ -192,7 +192,28 @@ actor HostClient {
         }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(R.self, from: resultData)
+        do {
+            return try decoder.decode(R.self, from: resultData)
+        } catch let error as DecodingError {
+            throw HostError.rpc("\(method) decode failed: \(Self.describeDecodingError(error))")
+        } catch {
+            throw error
+        }
+    }
+
+    private static func describeDecodingError(_ error: DecodingError) -> String {
+        switch error {
+        case .typeMismatch(let type, let ctx):
+            return "type mismatch (\(type)) at \(ctx.codingPath.map(\.stringValue).joined(separator: ".")): \(ctx.debugDescription)"
+        case .valueNotFound(let type, let ctx):
+            return "missing \(type) at \(ctx.codingPath.map(\.stringValue).joined(separator: "."))"
+        case .keyNotFound(let key, let ctx):
+            return "key '\(key.stringValue)' not found at \(ctx.codingPath.map(\.stringValue).joined(separator: "."))"
+        case .dataCorrupted(let ctx):
+            return "data corrupted at \(ctx.codingPath.map(\.stringValue).joined(separator: ".")): \(ctx.debugDescription)"
+        @unknown default:
+            return error.localizedDescription
+        }
     }
 
     /// Extract `error.message` or raw `result` JSON bytes from an RPC response line.

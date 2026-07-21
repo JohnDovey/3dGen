@@ -741,7 +741,9 @@ final class AppModel {
             statusText = "Opened '\(model.name)'."
             statusIsError = false
         } catch {
-            alertMessage = error.localizedDescription
+            alertMessage = "Could not open model: \(error.localizedDescription)"
+            statusText = error.localizedDescription
+            statusIsError = true
         }
     }
 

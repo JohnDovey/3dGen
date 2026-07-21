@@ -315,7 +315,7 @@ public class MainForm : Form
     }
 
     /// <summary>Prompts to save if there are unsaved changes, before a destructive action
-    /// (New/Open/closing the window) would otherwise silently discard them. Returns true if it's
+    /// (New/Open/Import/closing the window) would otherwise silently discard them. Returns true if it's
     /// safe to proceed — either nothing was dirty, the user chose to discard, or the user chose
     /// to save and the save succeeded.</summary>
     private async Task<bool> ConfirmDiscardUnsavedChangesAsync()
@@ -325,11 +325,14 @@ public class MainForm : Form
             return true;
         }
 
-        var result = MessageBox.Show(this,
-            $"Save changes to '{_currentModelName}' first?",
-            "3D Model Generator",
+        // Use the form as owner so the dialog stays on top of the Helix ElementHost child.
+        var result = MessageBox.Show(
+            this,
+            $"'{_currentModelName}' has unsaved changes.\n\nDo you want to save before continuing?",
+            "Unsaved changes",
             MessageBoxButtons.YesNoCancel,
-            MessageBoxIcon.Warning);
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button1);
 
         return result switch
         {
@@ -339,7 +342,13 @@ public class MainForm : Form
         };
     }
 
-    protected override async void OnFormClosing(FormClosingEventArgs e)
+    /// <summary>
+    /// WinForms does not reliably support <c>async void OnFormClosing</c>: after the first
+    /// <c>await</c> the close sequence can finish without honouring Cancel, so Exit/window-X
+    /// silently discarded dirty models. Cancel synchronously, then prompt on the next message
+    /// pump tick and re-close only if the user confirms.
+    /// </summary>
+    protected override void OnFormClosing(FormClosingEventArgs e)
     {
         if (_isClosingConfirmed || !_isDirty)
         {
@@ -347,15 +356,23 @@ public class MainForm : Form
             return;
         }
 
-        // Cancel this close, ask, and re-issue Close() once confirmed — OnFormClosing itself
-        // can't await synchronously since FormClosingEventArgs.Cancel must be set before
-        // returning control to the framework's closing sequence.
         e.Cancel = true;
-        if (await ConfirmDiscardUnsavedChangesAsync())
+        base.OnFormClosing(e);
+
+        // Defer the Yes/No/Cancel prompt until after FormClosing returns with Cancel=true.
+        BeginInvoke(new Action(async () =>
         {
-            _isClosingConfirmed = true;
-            Close();
-        }
+            if (!_isDirty || _isClosingConfirmed || IsDisposed)
+            {
+                return;
+            }
+
+            if (await ConfirmDiscardUnsavedChangesAsync())
+            {
+                _isClosingConfirmed = true;
+                Close();
+            }
+        }));
     }
 
     private void Undo()
@@ -397,8 +414,7 @@ public class MainForm : Form
             _borderTextPanel.LoadLines(model.BorderTextLines);
         });
 
-        _isDirty = true;
-        UpdateTitle();
+        MarkDirty();
         RegeneratePreview();
         ResetUndoBurstState();
         _lastCommittedModel = model;
@@ -453,11 +469,24 @@ public class MainForm : Form
             _undoDebounceTimer.Stop();
             _undoDebounceTimer.Start();
 
-            _isDirty = true;
-            UpdateTitle();
+            MarkDirty();
         }
 
         RegeneratePreview();
+    }
+
+    /// <summary>Marks the document modified and refreshes title + status chrome.</summary>
+    private void MarkDirty()
+    {
+        if (_isDirty)
+        {
+            // Still refresh title in case the name changed while already dirty.
+            UpdateTitle();
+            return;
+        }
+
+        _isDirty = true;
+        UpdateTitle();
     }
 
     /// <summary>Returns true if the model was actually saved — false if the user cancelled the
@@ -492,8 +521,7 @@ public class MainForm : Form
             _currentModelName = name;
             _isDirty = false;
             UpdateTitle();
-            _statusLabel.Text = $"Saved '{name}'.";
-            _statusLabel.ForeColor = System.Drawing.Color.Black;
+            SetStatus($"Saved '{name}'.");
             return true;
         }
         catch (Exception ex)
@@ -524,8 +552,7 @@ public class MainForm : Form
             var model = BuildModelFromControls();
             model.Name = _currentModelName;
             _projectBundleService.ExportBundle(model, dialog.FileName, AppVersion);
-            _statusLabel.Text = $"Exported project to {Path.GetFileName(dialog.FileName)}.";
-            _statusLabel.ForeColor = System.Drawing.Color.Black;
+            SetStatus($"Exported project to {Path.GetFileName(dialog.FileName)}.");
         }
         catch (Exception ex)
         {
@@ -572,8 +599,7 @@ public class MainForm : Form
             ResetUndoBurstState();
             _lastCommittedModel = BuildModelFromControls();
             UpdateUndoRedoMenuState();
-            _statusLabel.Text = $"Imported project '{_currentModelName}'.";
-            _statusLabel.ForeColor = System.Drawing.Color.Black;
+            SetStatus($"Imported project '{_currentModelName}'.");
         }
         catch (Exception ex)
         {
@@ -595,7 +621,21 @@ public class MainForm : Form
 
     private static string AppVersion => Application.ProductVersion;
 
-    private void UpdateTitle() => Text = $"3D Model Generator v{AppVersion} — {_currentModelName}{(_isDirty ? " *" : "")}";
+    private void UpdateTitle()
+    {
+        // Trailing * is the standard dirty marker (also visible in the taskbar/alt-tab title).
+        string dirtyMark = _isDirty ? " *" : "";
+        Text = $"3D Model Generator v{AppVersion} — {_currentModelName}{dirtyMark}";
+    }
+
+    /// <summary>Appends an unsaved-changes hint to status messages so dirty state is obvious
+    /// even if the title bar * is easy to miss.</summary>
+    private void SetStatus(string message, bool isError = false)
+    {
+        string dirtyHint = _isDirty ? "  ·  Unsaved changes" : "";
+        _statusLabel.Text = message + dirtyHint;
+        _statusLabel.ForeColor = isError ? System.Drawing.Color.DarkRed : System.Drawing.Color.Black;
+    }
 
     private void RegeneratePreview()
     {
@@ -646,8 +686,7 @@ public class MainForm : Form
                 items,
                 model.ShapeThickness,
                 borderTextColored);
-            _statusLabel.Text = $"{_currentMesh.Vertices.Count} vertices, {_currentMesh.Indices.Count / 3} triangles.";
-            _statusLabel.ForeColor = System.Drawing.Color.Black;
+            SetStatus($"{_currentMesh.Vertices.Count} vertices, {_currentMesh.Indices.Count / 3} triangles.");
             _exportButton.Enabled = true;
         }
         catch (Exception ex)
@@ -657,8 +696,7 @@ public class MainForm : Form
             // combination, a bad font — should surface as a status message, never crash the app.
             _currentMesh = null;
             _viewportHost.Clear();
-            _statusLabel.Text = ex.Message;
-            _statusLabel.ForeColor = System.Drawing.Color.DarkRed;
+            SetStatus(ex.Message, isError: true);
             _exportButton.Enabled = false;
         }
     }
@@ -674,7 +712,7 @@ public class MainForm : Form
         if (dialog.ShowDialog(this) == DialogResult.OK)
         {
             _orchestrator.ExportSTL(_currentMesh, dialog.FileName);
-            _statusLabel.Text = $"Exported to {dialog.FileName}";
+            SetStatus($"Exported to {dialog.FileName}");
         }
     }
 }
