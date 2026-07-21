@@ -41,7 +41,40 @@ final class AppModel: ObservableObject {
     func startIfNeeded() {
         guard !started else { return }
         started = true
+        // Match WinForms: one blank text line on a fresh document.
+        if model.textLines.isEmpty {
+            model.textLines = [WireTextLine.blank(lineNumber: 0)]
+        } else {
+            normalizeTextLineFonts()
+        }
         Task { await bootstrap() }
+    }
+
+    func addTextLine() {
+        let line = WireTextLine.blank(lineNumber: model.textLines.count)
+        model.textLines.append(line)
+        renumberTextLines()
+        scheduleRegenerate()
+    }
+
+    func removeTextLine(at index: Int) {
+        guard model.textLines.indices.contains(index) else { return }
+        model.textLines.remove(at: index)
+        renumberTextLines()
+        scheduleRegenerate()
+    }
+
+    func renumberTextLines() {
+        for i in model.textLines.indices {
+            model.textLines[i].lineNumber = i
+            model.textLines[i].fontName = FontCatalog.resolve(model.textLines[i].fontName)
+        }
+    }
+
+    private func normalizeTextLineFonts() {
+        for i in model.textLines.indices {
+            model.textLines[i].fontName = FontCatalog.resolve(model.textLines[i].fontName)
+        }
     }
 
     func shutdown() {
@@ -54,8 +87,8 @@ final class AppModel: ObservableObject {
     func scheduleRegenerate() {
         regenerateTask?.cancel()
         regenerateTask = Task { [weak self] in
-            // Light debounce for slider/typing bursts
-            try? await Task.sleep(nanoseconds: 80_000_000)
+            // Debounce slider/typing bursts (text content edits are chatty)
+            try? await Task.sleep(nanoseconds: 120_000_000)
             guard let self, !Task.isCancelled else { return }
             await self.regenerate()
         }
@@ -71,10 +104,15 @@ final class AppModel: ObservableObject {
         isBusy = true
         defer { isBusy = false }
 
+        // Resolve fonts & renumber before send so Core gets a consistent payload.
+        renumberTextLines()
+
         do {
             let result = try await client.generateParts(model: model)
             parts = result
-            statusText = "\(result.vertexCount) vertices, \(result.triangleCount) triangles."
+            let textCount = model.textLines.filter { !$0.content.isEmpty }.count
+            let textNote = textCount > 0 ? " · \(textCount) text line\(textCount == 1 ? "" : "s")" : ""
+            statusText = "\(result.vertexCount) vertices, \(result.triangleCount) triangles\(textNote)."
             statusIsError = false
         } catch {
             parts = nil

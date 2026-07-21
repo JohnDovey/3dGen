@@ -19,7 +19,10 @@ struct WireModel: Codable, Equatable {
     var imageInserts: [WireImageInsert] = []
 }
 
-struct WireTextLine: Codable, Equatable {
+struct WireTextLine: Codable, Equatable, Identifiable {
+    /// UI-stable identity (not sent to Host).
+    var id: UUID = UUID()
+
     var lineNumber: Int = 0
     var content: String = ""
     var fontName: String = "Arial"
@@ -31,6 +34,11 @@ struct WireTextLine: Codable, Equatable {
     var positionZ: Float = 0
     var rotationZ: Float = 0
     var colorArgb: Int = -29_696 // DarkOrange
+
+    enum CodingKeys: String, CodingKey {
+        case lineNumber, content, fontName, fontSize, textHeight
+        case positionMode, positionX, positionY, positionZ, rotationZ, colorArgb
+    }
 }
 
 struct WireSvgInsert: Codable, Equatable {
@@ -124,3 +132,42 @@ enum ShapeTypeOption: Int, CaseIterable, Identifiable, CustomStringConvertible {
         }
     }
 }
+
+/// Matches Core `TextPositionMode`.
+enum PositionModeOption: Int, CaseIterable, Identifiable, CustomStringConvertible {
+    case autoCenter = 0
+    case manual = 1
+    case relative = 2
+
+    var id: Int { rawValue }
+
+    var description: String {
+        switch self {
+        case .autoCenter: return "AutoCenter"
+        case .manual: return "Manual"
+        case .relative: return "Relative"
+        }
+    }
+
+    var showsXYZ: Bool { self != .autoCenter }
+}
+
+extension WireTextLine {
+    var positionModeOption: PositionModeOption {
+        get { PositionModeOption(rawValue: positionMode) ?? .autoCenter }
+        set { positionMode = newValue.rawValue }
+    }
+
+    static func blank(lineNumber: Int = 0) -> WireTextLine {
+        var line = WireTextLine()
+        line.lineNumber = lineNumber
+        line.content = ""
+        line.fontName = FontCatalog.preferredDefaultFamily
+        line.fontSize = 12
+        line.textHeight = 5
+        line.positionMode = PositionModeOption.autoCenter.rawValue
+        line.colorArgb = -29_696
+        return line
+    }
+}
+

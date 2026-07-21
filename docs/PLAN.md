@@ -174,6 +174,13 @@
   camera + orbit), status bar, and Export STL (⌘⇧E). Text/SVG/image/CustomSvg
   deferred to later phases.
 
+- **Phase 3 / Mac text lines (done):** Multi-line text editor in the Mac
+  inspector — add/remove rows; content, system font picker (names drawn in
+  their typeface), size, emboss height, color, position mode
+  (AutoCenter/Manual/Relative) with X/Y/Z/Rot; live regenerate via Host;
+  SceneKit already renders per-line `textMeshes`. SVG/image/CustomSvg still
+  later.
+
 Remaining ideas (not currently planned as a phase): richer validation feedback in dialogs; a
 configurable alpha-inclusion threshold (currently a hardcoded 50%) if the default proves wrong
 for some images in practice; the same off-center-artwork drag-jump class of bug likely also

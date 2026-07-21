@@ -36,6 +36,10 @@ struct ShapeInspectorView: View {
 
                 Divider()
 
+                TextLinesPanelView()
+
+                Divider()
+
                 Button {
                     appModel.exportSTL()
                 } label: {
