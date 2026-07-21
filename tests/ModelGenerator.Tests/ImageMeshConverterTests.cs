@@ -91,6 +91,25 @@ public class ImageMeshConverterTests
         Assert.True(halfMax.X - halfMin.X < (fullMax.X - fullMin.X) * 0.75f);
     }
 
+    [Fact]
+    public void ConvertImageToMesh_OpaqueContentOffCenterInLargerCanvas_MeshIsCenteredAtOrigin()
+    {
+        // A small opaque square tucked in one corner of a much bigger transparent canvas — the
+        // image-insert analog of the SVG "canvas bigger than the drawing" bug: local (0,0) (what
+        // PositionX/Y and viewport dragging actually move) used to sit at the center of the full
+        // canvas rather than the visible relief, making a drag appear to yank it out from under
+        // the cursor the instant it started.
+        byte[] imageData = CreateTestPng(100, 100, g => g.FillRectangle(Brushes.Gray, 5, 5, 20, 20));
+        var insert = new ImageInsert { ImageData = imageData, Scale = 40, ReliefHeight = 5, Detail = ImageDetail.Medium };
+
+        var mesh = _converter.ConvertImageToMesh(insert);
+
+        var (min, max) = MeshMath.BoundingBox(mesh.Vertices.Select(v => new Vector2(v.X, v.Y)));
+        var center = (min + max) / 2f;
+        Assert.Equal(0f, center.X, precision: 0);
+        Assert.Equal(0f, center.Y, precision: 0);
+    }
+
     private static float AverageXOfTallestVertices(CoreMesh mesh)
     {
         float maxZ = mesh.Vertices.Max(v => v.Z);

@@ -25,11 +25,17 @@ public class SvgMeshConverter : ISvgMeshConverter
         }
 
         var (min, max) = MeshMath.BoundingBox(contours.SelectMany(c => c));
+        var center = (min + max) / 2f;
         float maxDimension = MathF.Max(max.X - min.X, max.Y - min.Y);
         float scaleFactor = maxDimension > 0 ? insert.Scale / maxDimension : 1f;
 
+        // Center on the artwork's own bounding box, not the SVG's coordinate-space origin — an
+        // SVG whose canvas/viewBox is bigger than the actual drawing (or whose drawing isn't
+        // centered within it) would otherwise put local (0,0) — the point that PositionX/Y and
+        // viewport dragging actually move — well away from the visible shape's center, making a
+        // drag appear to "jump" the shape out from under the cursor the moment it starts.
         var scaledContours = contours
-            .Select(contour => (IReadOnlyList<Vector2>)contour.Select(p => p * scaleFactor).ToList())
+            .Select(contour => (IReadOnlyList<Vector2>)contour.Select(p => (p - center) * scaleFactor).ToList())
             .ToList();
 
         return MeshMath.ExtrudeContours(scaledContours, 0, insert.EmbossHeight);

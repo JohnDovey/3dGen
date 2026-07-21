@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using ModelGenerator.Core.Models;
@@ -66,7 +67,16 @@ public class ImageMeshConverter : IImageMeshConverter
         // mm — this is what fits the grid's physical footprint to Scale along its longer side.
         float cellSize = insert.Scale / longerSamples;
 
-        return MeshMath.ExtrudeMaskedHeightfield(topZ, included, cellSize, cellSize, zBottom: 0);
+        var mesh = MeshMath.ExtrudeMaskedHeightfield(topZ, included, cellSize, cellSize, zBottom: 0);
+
+        // ExtrudeMaskedHeightfield centers the grid on the image's full pixel bounds, not on the
+        // included (opaque) footprint — an image with a lot of asymmetric transparent padding
+        // (a logo pushed into one corner of a bigger canvas) would otherwise put local (0,0) —
+        // the point PositionX/Y and viewport dragging actually move — away from the relief's
+        // visual center, making a drag appear to yank it out from under the cursor at the start.
+        var (min, max) = MeshMath.BoundingBox(mesh.Vertices.Select(v => new Vector2(v.X, v.Y)));
+        var footprintCenter = (min + max) / 2f;
+        return mesh.Transformed(new Vector3(-footprintCenter.X, -footprintCenter.Y, 0f), rotationZRadians: 0f);
     }
 
     public IReadOnlyList<Mesh> ConvertMultipleImageInserts(IReadOnlyList<ImageInsert> inserts) =>

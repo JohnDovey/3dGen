@@ -36,6 +36,8 @@ public class HelixViewportHost : UserControl
 
     private ModelVisual3D? _floorVisual;
     private ModelVisual3D? _borderVisual;
+    private LinesVisual3D? _selectionVisual;
+    private (DraggableItemKind Kind, int Index)? _selectedItem;
     private bool _isDragging;
     private DraggableItemKind _draggedKind;
     private int _draggedIndex = -1;
@@ -82,7 +84,7 @@ public class HelixViewportHost : UserControl
     /// dragPlaneZ is the world Z of the shape's top surface, used when dragging an item.</summary>
     public void ShowModel(ColoredMesh floor, ColoredMesh border, IReadOnlyList<DraggableMesh> items, float dragPlaneZ)
     {
-        Clear();
+        ClearVisuals();
 
         _floorVisual = new ModelVisual3D { Content = BuildModel(floor.Mesh, floor.Color) };
         _viewport.Children.Add(_floorVisual);
@@ -98,9 +100,21 @@ public class HelixViewportHost : UserControl
         }
 
         _dragPlaneZ = dragPlaneZ;
+
+        // ShowModel is called again after every edit (including on every mouse-move while
+        // dragging), rebuilding every visual from scratch — re-apply the highlight to whichever
+        // item is still selected so it keeps following the item instead of disappearing after
+        // the very first regeneration.
+        UpdateSelectionVisual();
     }
 
     public void Clear()
+    {
+        ClearVisuals();
+        _selectedItem = null;
+    }
+
+    private void ClearVisuals()
     {
         if (_floorVisual is not null)
         {
@@ -117,6 +131,83 @@ public class HelixViewportHost : UserControl
             _viewport.Children.Remove(visual);
         }
         _draggableVisualToItem.Clear();
+
+        if (_selectionVisual is not null)
+        {
+            _viewport.Children.Remove(_selectionVisual);
+            _selectionVisual = null;
+        }
+    }
+
+    /// <summary>Rebuilds the selection highlight (a wireframe box slightly larger than the
+    /// selected item's bounds) around whichever visual currently matches _selectedItem, or
+    /// removes it if nothing is selected / the selected item no longer exists.</summary>
+    private void UpdateSelectionVisual()
+    {
+        if (_selectionVisual is not null)
+        {
+            _viewport.Children.Remove(_selectionVisual);
+            _selectionVisual = null;
+        }
+
+        if (_selectedItem is not { } selected)
+        {
+            return;
+        }
+
+        foreach (var (visual, item) in _draggableVisualToItem)
+        {
+            if (item != selected)
+            {
+                continue;
+            }
+            if (visual.Content is GeometryModel3D { Geometry: MeshGeometry3D geometry })
+            {
+                _selectionVisual = BuildSelectionBox(geometry.Bounds);
+                _viewport.Children.Add(_selectionVisual);
+            }
+            break;
+        }
+    }
+
+    private void SetSelection((DraggableItemKind Kind, int Index)? selection)
+    {
+        _selectedItem = selection;
+        UpdateSelectionVisual();
+    }
+
+    /// <summary>Builds a wireframe box slightly larger than `bounds` (so it reads as an outline
+    /// around the item rather than clipping through its surface) — the visual "what's currently
+    /// selected" indicator.</summary>
+    private static LinesVisual3D BuildSelectionBox(Rect3D bounds)
+    {
+        const double margin = 0.5;
+        double x0 = bounds.X - margin, x1 = bounds.X + bounds.SizeX + margin;
+        double y0 = bounds.Y - margin, y1 = bounds.Y + bounds.SizeY + margin;
+        double z0 = bounds.Z - margin, z1 = bounds.Z + bounds.SizeZ + margin;
+
+        var c000 = new Point3D(x0, y0, z0);
+        var c100 = new Point3D(x1, y0, z0);
+        var c110 = new Point3D(x1, y1, z0);
+        var c010 = new Point3D(x0, y1, z0);
+        var c001 = new Point3D(x0, y0, z1);
+        var c101 = new Point3D(x1, y0, z1);
+        var c111 = new Point3D(x1, y1, z1);
+        var c011 = new Point3D(x0, y1, z1);
+
+        var points = new Point3DCollection
+        {
+            c000, c100, c100, c110, c110, c010, c010, c000, // bottom face
+            c001, c101, c101, c111, c111, c011, c011, c001, // top face
+            c000, c001, c100, c101, c110, c111, c010, c011  // vertical edges
+        };
+
+        return new LinesVisual3D
+        {
+            Points = points,
+            Color = Colors.Yellow,
+            Thickness = 2
+        };
     }
 
     private void OnPreviewMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -128,8 +219,15 @@ public class HelixViewportHost : UserControl
             _isDragging = true;
             _draggedKind = item.Kind;
             _draggedIndex = item.Index;
+            SetSelection(item);
             _viewport.Viewport.CaptureMouse();
             e.Handled = true; // suppress HelixViewport3D's default click-drag camera rotation
+        }
+        else
+        {
+            // Clicked empty space / the (non-draggable) floor or border — deselect, matching
+            // ordinary click-to-select-or-deselect behavior.
+            SetSelection(null);
         }
     }
 

@@ -76,6 +76,28 @@ public class SvgMeshConverterTests
     }
 
     [Fact]
+    public void ConvertSvgToMesh_ArtworkOffCenterInALargerCanvas_MeshIsCenteredAtOrigin()
+    {
+        // A small rect tucked in the corner of a much bigger canvas — the kind of SVG that used
+        // to put local (0,0) (what PositionX/Y and viewport dragging actually move) far from the
+        // artwork's visual center, making a drag appear to yank the shape out from under the
+        // cursor the instant it started. Regression test for that bug.
+        const string svg = """
+            <svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
+                <rect x="10" y="10" width="20" height="20" />
+            </svg>
+            """;
+        var insert = new SvgInsert { SvgContent = svg, Scale = 40, EmbossHeight = 5 };
+
+        var mesh = _converter.ConvertSvgToMesh(insert);
+
+        var (min, max) = MeshMath.BoundingBox(mesh.Vertices.Select(v => new System.Numerics.Vector2(v.X, v.Y)));
+        var center = (min + max) / 2f;
+        Assert.Equal(0f, center.X, precision: 1);
+        Assert.Equal(0f, center.Y, precision: 1);
+    }
+
+    [Fact]
     public void ConvertMultipleSvgInserts_ReturnsOneMeshPerInsert()
     {
         const string svg = """
